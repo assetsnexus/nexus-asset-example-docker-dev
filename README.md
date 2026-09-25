@@ -86,6 +86,20 @@ After `docker compose up -d`, the node logs `awaiting provisioning` until it has
 
 If BLE hardware or D-Bus is missing, the node keeps USB and manual paths working.
 
+## After pairing: blueprint sync from the registry
+
+Pairing / init only boots identity and region (or assets-registry) connectivity. Once the asset is registered and online it **pulls its blueprint configuration and other relevant instance data** from the region / assets registry on the normal heartbeat / config-sync path (`clonedConfigs`, endpoints, jobs, offerings, etc.). You do not hand-maintain a full config tree on the IPC for day-to-day operation — the digital twin on Nexus is the source of truth; Force Sync in the portal can push an immediate pull.
+
+## Recovering a destroyed or replaced device
+
+Restoring a wiped IPC or swapping hardware follows the same idea as first-time init (manual ZIP, USB, or BLE), then the twin takes over:
+
+1. **Bring the stack up** on the replacement host (`./prepare.sh` → `docker compose up -d`) and **re-pair** with the existing asset identity (same three init options, using registration material for that prototype / instance).
+2. **Quick availability** — after registration the node restores operational config from its **digital twin** (region / registry): blueprint-derived configs and other twin-held state sync down so the asset can come online again without waiting on bulk history.
+3. **Background restore** — metrics, recordings, and other bulk history are then restored in the background from **contracted blob / backup storage** (blueprint deployment Restic / storage rules and operator contracts), not from stuffing large archives into the pairing package.
+
+Until identity is re-established the node stays in `awaiting provisioning`. After pairing, watch portal status (online) and sync; bulk backup replay continues asynchronously.
+
 ## Dev observability (`observe` + `logs`) — not for production
 
 Grafana, Prometheus, node-exporter, and Loki are **development / lab aids** so you can inspect the node on the IPC without the portal. Production fleets rely on **Nexus APIs and portal dashboards** instead — leave these profiles off.
