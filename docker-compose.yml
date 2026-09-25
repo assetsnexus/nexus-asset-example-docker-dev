@@ -1,0 +1,263 @@
+# ANX asset-node IPC example — one asset per host (Linux amd64 / arm64).
+# Usage:
+#   ./prepare.sh
+#   docker compose up -d
+# Optional inference sidecar (not wired): docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
+#
+# Profiles (COMPOSE_PROFILES in .env): registry-db, observe, oem, logs
+# Always on: anx-assets-node + victoriametrics
+
+services:
+  anx-assets-node:
+    image: ${ANX_ASSETS_NODE_IMAGE:-eu1.dockerreg.sdk.assetsnexus.org/anx-assets-node}:${ANX_ASSETS_NODE_TAG:-latest}
+    # Omit platform: so Docker pulls the host architecture (Pi arm64 vs PC amd64).
+    container_name: anx-assets-node-ipc
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - RUST_LOG=${RUST_LOG:-anx_assets_node=info,info}
+      - LOCAL_DATA_PATH=/app/local_data
+      - VICTORIAMETRICS_URL=${VICTORIAMETRICS_URL:-http://victoriametrics:8428}
+      - ANX_USB_ASSET_INIT_ROOT=/media/usb
+    volumes:
+      - ./data:/app/local_data:rw
+      - ./data/protocol_mappings:/app/mappings:ro
+      - type: bind
+        source: ${ANX_USB_ASSET_INIT_ROOT:-/media/usb}
+        target: /media/usb
+        read_only: true
+        bind:
+          propagation: rslave
+          create_host_path: true
+      - /run/dbus:/run/dbus:rw
+      - /var/run/dbus:/var/run/dbus:rw
+    devices:
+      - /dev/rfkill:/dev/rfkill
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    depends_on:
+      victoriametrics:
+        condition: service_started
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+      - "${INTERNAL_PORT:-8081}:8081"
+      - "${GRPC_PORT:-50051}:50051"
+      - "${WEBSOCKET_PORT:-8082}:8082"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    container_name: anx-ipc-victoriametrics
+    restart: unless-stopped
+    command:
+      - -storageDataPath=/victoria-metrics-data
+      - -httpListenAddr=:8428
+      - -retentionPeriod=12
+    volumes:
+      - ./volumes/victoriametrics:/victoria-metrics-data
+    ports:
+      - "${VICTORIAMETRICS_PORT:-8428}:8428"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://victoriametrics:8428/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    profiles: ["registry-db"]
+    image: postgres:16-alpine
+    container_name: anx-ipc-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DATABASE:-anx_assets}
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DATABASE:-anx_assets}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  mongodb:
+    profiles: ["registry-db"]
+    image: mongo:7
+    container_name: anx-ipc-mongodb
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=${MONGO_DATABASE:-anx-asset}
+    volumes:
+      - ./volumes/mongodb/data:/data/db
+      - ./volumes/mongodb/config:/data/configdb
+    ports:
+      - "${MONGO_PORT:-27018}:27017"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --username $$MONGO_INITDB_ROOT_USERNAME --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval 'db.adminCommand({ ping: 1 })'",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    profiles: ["registry-db"]
+    image: redis:7-alpine
+    container_name: anx-ipc-redis
+    restart: unless-stopped
+    env_file:
+      - .env
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass $$REDIS_PASSWORD
+    volumes:
+      - ./volumes/redis:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  grafana:
+    profiles: ["observe"]
+    image: grafana/grafana:latest
+    container_name: anx-ipc-grafana
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      - GF_SERVER_ROOT_URL=http://localhost:${GRAFANA_PORT:-3001}
+    volumes:
+      - ./volumes/grafana:/var/lib/grafana
+      - ./data/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./data/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - victoriametrics
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  prometheus:
+    profiles: ["observe"]
+    image: prom/prometheus:latest
+    container_name: anx-ipc-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./data/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./volumes/prometheus:/prometheus
+    ports:
+      - "${PROMETHEUS_SERVER_PORT:-9095}:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - node-exporter
+      - anx-assets-node
+
+  node-exporter:
+    profiles: ["observe"]
+    image: prom/node-exporter:latest
+    container_name: anx-ipc-node-exporter
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - "${NODE_EXPORTER_PORT:-9100}:9100"
+
+  mqtt:
+    profiles: ["oem"]
+    image: eclipse-mosquitto:latest
+    container_name: anx-ipc-mqtt
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+      - "${MQTT_WS_PORT:-9001}:9001"
+    volumes:
+      - ./data/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./volumes/mqtt/data:/mosquitto/data
+      - ./volumes/mqtt/log:/mosquitto/log
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "127.0.0.1", "-p", "1883", "-t", "$$SYS/broker/version", "-C", "1", "-W", "5"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 20s
+
+  nodered:
+    profiles: ["oem"]
+    image: nodered/node-red:latest
+    container_name: anx-ipc-nodered
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    volumes:
+      - ./volumes/nodered:/data
+      - /sys:/sys:ro
+    ports:
+      - "${NODERED_PORT:-1880}:1880"
+    depends_on:
+      - mqtt
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://nodered:1880/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  loki:
+    profiles: ["logs"]
+    image: grafana/loki:latest
+    container_name: anx-ipc-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./volumes/loki:/loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    healthcheck:
+      test: ["CMD", "/usr/bin/loki", "-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+networks:
+  default:
+    name: anx-assets-ipc-network
+    driver: bridge

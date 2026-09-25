@@ -1,0 +1,38 @@
+# Optional on-device anx-inference sidecar (NOT WIRED YET).
+# Start only when the blueprint Deployment → Local agents toggle is enabled:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
+#
+# This file is a placeholder: no agent runtime, no region bridge, no model pull.
+# GPU: uncomment the deploy.resources block and use an NVIDIA-capable host + nvidia-container-toolkit.
+
+services:
+  anx-inference:
+    image: ${ANX_INFERENCE_IMAGE:-eu1.dockerreg.sdk.assetsnexus.org/anx-inference-backend}:${ANX_INFERENCE_TAG:-latest}
+    container_name: anx-ipc-inference
+    restart: unless-stopped
+    profiles: ["inference"]
+    env_file:
+      - .env.inference
+    environment:
+      - NODE_ENV=production
+      # Future: point at sibling anx-assets-node on the same network
+      - ANX_ASSETS_NODE_URL=http://anx-assets-node:8080
+    networks:
+      - default
+    ports:
+      - "${ANX_INFERENCE_PORT:-3055}:3055"
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    command:
+      - sh
+      - -c
+      - |
+        echo "ANX inference sidecar placeholder — replace image/command when on-device agents are wired."
+        echo "See blueprint configurations.deployment.localAgents and docker-compose.inference.yml README."
+        sleep infinity

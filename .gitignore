@@ -1,0 +1,8 @@
+.env
+.env.inference
+docker-compose.override.yml
+data/config/database.yaml
+data/config/general.yml
+data/grafana/
+data/prometheus/
+*.local

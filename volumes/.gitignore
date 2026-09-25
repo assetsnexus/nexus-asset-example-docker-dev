@@ -1,0 +1,5 @@
+# Persist empty tree in git; ignore all runtime data written by containers.
+*
+!*/
+!.gitignore
+!**/.gitkeep
