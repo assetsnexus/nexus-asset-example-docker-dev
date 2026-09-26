@@ -20,6 +20,8 @@ services:
       - LOCAL_DATA_PATH=/app/local_data
       - VICTORIAMETRICS_URL=${VICTORIAMETRICS_URL:-http://victoriametrics:8428}
       - ANX_USB_ASSET_INIT_ROOT=/media/usb
+      - MQTT_BROKER=${MQTT_BROKER:-mqtts://127.0.0.1:8883}
+      - MQTT_CA_FILE=${MQTT_CA_FILE:-/app/local_data/mqtt/certs/ca.crt}
     volumes:
       - ./data:/app/local_data:rw
       - ./data/protocol_mappings:/app/mappings:ro
@@ -120,7 +122,7 @@ services:
       start_period: 40s
 
   redis:
-    profiles: ["registry-db"]
+    profiles: ["registry-db", "state"]
     image: redis:7-alpine
     container_name: anx-ipc-redis
     restart: unless-stopped
@@ -129,11 +131,11 @@ services:
     command:
       - sh
       - -c
-      - exec redis-server --appendonly yes --requirepass $$REDIS_PASSWORD
+      - exec redis-server --appendonly yes --requirepass $$REDIS_PASSWORD --bind 0.0.0.0
     volumes:
       - ./volumes/redis:/data
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep -q PONG"]
       interval: 10s
@@ -207,14 +209,19 @@ services:
     container_name: anx-ipc-mqtt
     restart: unless-stopped
     ports:
-      - "${MQTT_PORT:-1883}:1883"
-      - "${MQTT_WS_PORT:-9001}:9001"
+      - "${MQTT_TLS_PORT:-8883}:8883"
     volumes:
       - ./data/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./data/mqtt/passwd:/mosquitto/config/passwd:ro
+      - ./data/mqtt/certs:/mosquitto/certs:ro
       - ./volumes/mqtt/data:/mosquitto/data
       - ./volumes/mqtt/log:/mosquitto/log
     healthcheck:
-      test: ["CMD", "mosquitto_sub", "-h", "127.0.0.1", "-p", "1883", "-t", "$$SYS/broker/version", "-C", "1", "-W", "5"]
+      test:
+        [
+          "CMD-SHELL",
+          "mosquitto_sub -h 127.0.0.1 -p 8883 --cafile /mosquitto/certs/ca.crt -u anx -P \"$$MQTT_PASSWORD\" -t '$$SYS/broker/version' -C 1 -W 5 || exit 1",
+        ]
       interval: 30s
       timeout: 15s
       retries: 5

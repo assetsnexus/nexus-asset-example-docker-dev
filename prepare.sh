@@ -47,6 +47,7 @@ set_env_if_empty POSTGRES_PASSWORD "$(gen_secret)"
 set_env_if_empty MONGO_ROOT_PASSWORD "$(gen_secret)"
 set_env_if_empty REDIS_PASSWORD "$(gen_secret)"
 set_env_if_empty GRAFANA_ADMIN_PASSWORD "$(gen_secret)"
+set_env_if_empty MQTT_PASSWORD "$(gen_secret)"
 
 # Keep Grafana GF_* in sync with GRAFANA_* when GF is empty
 # shellcheck disable=SC1091
@@ -86,6 +87,18 @@ has_profile() {
   echo ",${PROFILES}," | grep -q ",$1,"
 }
 
+if has_profile state || has_profile registry || has_profile registry-db; then
+  set_env_if_empty ANX_REDIS_URL "redis://:${REDIS_PASSWORD}@redis:6379"
+  if command -v openssl >/dev/null 2>&1; then
+    set_env_if_empty ANX_REDIS_DATA_KEY "$(openssl rand -base64 32)"
+  else
+    set_env_if_empty ANX_REDIS_DATA_KEY "$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+  fi
+  if has_profile registry; then
+    set_env_if_empty OPERATION_MODE "multi_tenant"
+  fi
+fi
+
 echo "==> data/config/database.yaml (enabled flags match COMPOSE_PROFILES)"
 mkdir -p data/config data/certs data/protocol_mappings data/grafana/provisioning/datasources \
   data/grafana/provisioning/dashboards data/grafana/dashboards data/prometheus data/mqtt
@@ -104,6 +117,50 @@ mkdir -p \
   volumes/nodered \
   volumes/loki
 echo "  ensured volumes/{victoriametrics,postgres,mongodb,redis,grafana,prometheus,mqtt,nodered,loki}"
+
+if has_profile oem; then
+  # shellcheck disable=SC1091
+  source .env
+  if [[ -n "${MQTT_PASSWORD:-}" ]]; then
+    if command -v mosquitto_passwd >/dev/null 2>&1; then
+      mosquitto_passwd -b -c data/mqtt/passwd anx "${MQTT_PASSWORD}"
+      echo "  wrote data/mqtt/passwd for user anx"
+    else
+      echo "WARN: mosquitto_passwd not on host. Install mosquitto-clients and rerun prepare, or:" >&2
+      echo "  docker run --rm -v \"\$PWD/data/mqtt:/cfg\" eclipse-mosquitto:2 mosquitto_passwd -b -c /cfg/passwd anx \"\$MQTT_PASSWORD\"" >&2
+    fi
+  fi
+
+  # TLS CA + broker cert for Mosquitto 8883 (never commit data/mqtt/certs or private keys).
+  # Equivalent one-liner if regenerating by hand:
+  #   openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout data/mqtt/certs/ca.key \
+  #     -out data/mqtt/certs/ca.crt -subj "/CN=anx-ipc-mqtt-ca"
+  mkdir -p data/mqtt/certs
+  if [[ ! -f data/mqtt/certs/ca.crt || ! -f data/mqtt/certs/broker.crt || ! -f data/mqtt/certs/broker.key ]]; then
+    if command -v openssl >/dev/null 2>&1; then
+      openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+        -keyout data/mqtt/certs/ca.key -out data/mqtt/certs/ca.crt -subj "/CN=anx-ipc-mqtt-ca" 2>/dev/null
+      openssl req -newkey rsa:2048 -nodes \
+        -keyout data/mqtt/certs/broker.key -out data/mqtt/certs/broker.csr -subj "/CN=localhost" 2>/dev/null
+      printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\n' > data/mqtt/certs/broker.ext
+      openssl x509 -req -in data/mqtt/certs/broker.csr \
+        -CA data/mqtt/certs/ca.crt -CAkey data/mqtt/certs/ca.key -CAcreateserial \
+        -out data/mqtt/certs/broker.crt -days 825 -extfile data/mqtt/certs/broker.ext 2>/dev/null
+      rm -f data/mqtt/certs/broker.csr data/mqtt/certs/broker.ext
+      chmod 600 data/mqtt/certs/ca.key data/mqtt/certs/broker.key || true
+      echo "  generated data/mqtt/certs (ca.crt + broker cert; private keys not printed)"
+    else
+      echo "WARN: openssl missing — cannot generate MQTT TLS certs under data/mqtt/certs" >&2
+    fi
+  else
+    echo "  kept existing data/mqtt/certs"
+  fi
+
+  # Point asset-node + clients at mqtts://127.0.0.1:8883 (do not print secrets).
+  set_env_if_empty MQTT_BROKER "mqtts://127.0.0.1:8883"
+  set_env_if_empty MQTT_CA_FILE "/app/local_data/mqtt/certs/ca.crt"
+  set_env_if_empty MQTT_TLS_PORT "8883"
+fi
 
 REG_DB=false
 has_profile registry-db && REG_DB=true

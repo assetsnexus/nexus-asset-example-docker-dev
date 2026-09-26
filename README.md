@@ -138,6 +138,16 @@ Use three different blueprints (e.g. plain full asset, BLE runtime enabled, seri
 
 On each IPC: portal shows online. With `observe` (dev only): Grafana shows node gauges and VictoriaMetrics scrape up.
 
+## Robot acceptance (two blueprints)
+
+| IPC | Blueprint | Control | Pass |
+|-----|-----------|---------|------|
+| Robot A | `1773445812320-wer87qrc1` | Node creates a uinput Xbox pad; Python reads it via evdev; telemetry returns on MQTT | `evtest` shows the virtual pad; health dashboard shows `robot.*` metrics; Flask `/video_feed` plays |
+| Robot B | RaspTank MQTT (`rasptank-mqtt`) | No `/dev/uinput`. Controller state and commands go over MQTT | Same metrics and camera without a gamepad device |
+| Fallback | Either with `ANX_CONTROL_SOURCE=auto` | Unplug USB | Service logs switch to MQTT within 5s and drive still stops on deadman |
+
+Enable `ANX_BRIDGE_ENABLED=true` on the robot service and the compose `oem` profile (Mosquitto password from `prepare.sh`).
+
 Physical phone/USB stick may not be available in CI — confirm with node logs (`awaiting provisioning` / `USB provisioning complete` / `BLE GATT peripheral started`) and the result files above.
 
 ## Troubleshooting

@@ -1,0 +1,37 @@
+# Two solo nodes, one asset, one shared Redis. The region elects the primary.
+# Do not commit a .env. Export ANX_REDIS_PASSWORD and ANX_REDIS_DATA_KEY
+# (openssl rand -base64 32, identical on both nodes) before running compose.
+# redis-standby is a warm copy for manual failover; it is read-only, so the
+# nodes always write to redis-primary.
+services:
+  redis-primary:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --requirepass ${ANX_REDIS_PASSWORD:?set ANX_REDIS_PASSWORD} --bind 0.0.0.0
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  redis-standby:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --requirepass ${ANX_REDIS_PASSWORD:?set ANX_REDIS_PASSWORD} --replicaof redis-primary 6379 --masterauth ${ANX_REDIS_PASSWORD:?set ANX_REDIS_PASSWORD}
+    depends_on:
+      - redis-primary
+
+  asset-a:
+    image: anx-assets-node:latest
+    environment:
+      OPERATION_MODE: single_asset
+      ANX_REPLICA_ID: a
+      ANX_REDIS_URL: redis://:${ANX_REDIS_PASSWORD:?set ANX_REDIS_PASSWORD}@redis-primary:6379
+      ANX_REDIS_DATA_KEY: ${ANX_REDIS_DATA_KEY:?set ANX_REDIS_DATA_KEY}
+    depends_on:
+      - redis-primary
+
+  asset-b:
+    image: anx-assets-node:latest
+    environment:
+      OPERATION_MODE: single_asset
+      ANX_REPLICA_ID: b
+      ANX_REDIS_URL: redis://:${ANX_REDIS_PASSWORD:?set ANX_REDIS_PASSWORD}@redis-primary:6379
+      ANX_REDIS_DATA_KEY: ${ANX_REDIS_DATA_KEY:?set ANX_REDIS_DATA_KEY}
+    depends_on:
+      - redis-primary
