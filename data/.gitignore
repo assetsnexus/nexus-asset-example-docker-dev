@@ -1,0 +1,7 @@
+*
+!.gitignore
+!mqtt/
+!mqtt/**
+!protocol_mappings/
+!protocol_mappings/**
+!.gitkeep

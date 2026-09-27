@@ -7,4 +7,5 @@ data/grafana/
 data/prometheus/
 data/mqtt/passwd
 data/mqtt/certs/
+data/edge/
 *.local

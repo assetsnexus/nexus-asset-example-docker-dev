@@ -2,9 +2,11 @@
 # Usage:
 #   ./prepare.sh
 #   docker compose up -d
-# Optional inference sidecar (not wired): docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
+# Full Edge AI:
+#   ./prepare.sh --with-inference
+#   docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
 #
-# Profiles (COMPOSE_PROFILES in .env): registry-db, observe, oem, logs
+# Profiles (COMPOSE_PROFILES in .env): registry-db, observe, oem, oem-io, logs, inference
 # Always on: anx-assets-node + victoriametrics
 
 services:
@@ -22,6 +24,8 @@ services:
       - ANX_USB_ASSET_INIT_ROOT=/media/usb
       - MQTT_BROKER=${MQTT_BROKER:-mqtts://127.0.0.1:8883}
       - MQTT_CA_FILE=${MQTT_CA_FILE:-/app/local_data/mqtt/certs/ca.crt}
+      - ANX_EDGE_INFERENCE_URL=${ANX_EDGE_INFERENCE_URL:-http://anx-inference:3055}
+      - ANX_EDGE_LOCAL_TOKEN_FILE=${ANX_EDGE_LOCAL_TOKEN_FILE:-/app/local_data/edge/local-trust.token}
     volumes:
       - ./data:/app/local_data:rw
       - ./data/protocol_mappings:/app/mappings:ro
@@ -204,7 +208,7 @@ services:
       - "${NODE_EXPORTER_PORT:-9100}:9100"
 
   mqtt:
-    profiles: ["oem"]
+    profiles: ["oem", "oem-io"]
     image: eclipse-mosquitto:latest
     container_name: anx-ipc-mqtt
     restart: unless-stopped
@@ -243,6 +247,28 @@ services:
       - mqtt
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://nodered:1880/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nodered-io:
+    profiles: ["oem-io"]
+    image: nodered/node-red:latest
+    container_name: anx-ipc-nodered-io
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      - FLOWS=port-io.json
+    volumes:
+      - ./volumes/nodered-io:/data
+      - ./flows/port-io.json:/data/port-io.json:ro
+      - ./data/mqtt/certs/ca.crt:/certs/ca.crt:ro
+    ports:
+      - "${NODERED_IO_PORT:-1881}:1880"
+    depends_on:
+      - mqtt
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:1880/"]
       interval: 30s
       timeout: 10s
       retries: 3

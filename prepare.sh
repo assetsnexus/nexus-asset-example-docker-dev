@@ -1,15 +1,45 @@
 #!/usr/bin/env bash
 # Prepare an ANX asset IPC host: secrets, database.yaml, Grafana/Prometheus provisioning, init probes.
+# Full Edge AI: ./prepare.sh --with-inference
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
+
+WITH_INFERENCE=false
+for arg in "$@"; do
+  case "$arg" in
+    --with-inference) WITH_INFERENCE=true ;;
+    -h|--help)
+      echo "Usage: ./prepare.sh [--with-inference]"
+      echo "  --with-inference  Enable registry-db + inference profiles, local trust token, .env.inference"
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $arg (try --help)" >&2
+      exit 1
+      ;;
+  esac
+done
 
 gen_secret() {
   if command -v openssl >/dev/null 2>&1; then
     openssl rand -hex 24
   else
     head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'
+  fi
+}
+
+set_env_in_file() {
+  local file="$1"
+  local key="$2"
+  local val="$3"
+  if grep -qE "^${key}=" "$file" 2>/dev/null; then
+    local esc
+    esc=$(printf '%s' "$val" | sed -e 's/[&|\\]/\\&/g')
+    sed -i "s|^${key}=.*|${key}=${esc}|" "$file"
+  else
+    echo "${key}=${val}" >> "$file"
   fi
 }
 
@@ -28,6 +58,37 @@ set_env_if_empty() {
   fi
 }
 
+set_inference_env_if_empty() {
+  local key="$1"
+  local val="$2"
+  if grep -qE "^${key}=$" .env.inference 2>/dev/null || ! grep -qE "^${key}=" .env.inference 2>/dev/null; then
+    set_env_in_file .env.inference "$key" "$val"
+    echo "  inference: set ${key}"
+  elif grep -qE "^${key}=.+" .env.inference 2>/dev/null; then
+    local cur
+    cur=$(grep -E "^${key}=" .env.inference | head -1 | cut -d= -f2-)
+    if [[ "$cur" == *"CHANGE_ME"* || -z "$cur" ]]; then
+      set_env_in_file .env.inference "$key" "$val"
+      echo "  inference: refreshed ${key}"
+    else
+      echo "  inference: kept existing ${key}"
+    fi
+  fi
+}
+
+merge_compose_profile() {
+  local add="$1"
+  local cur="${COMPOSE_PROFILES:-}"
+  if [[ -z "$cur" ]]; then
+    COMPOSE_PROFILES="$add"
+    return
+  fi
+  if echo ",${cur}," | grep -q ",${add},"; then
+    return
+  fi
+  COMPOSE_PROFILES="${cur},${add}"
+}
+
 echo "==> ANX asset IPC prepare"
 
 if [[ ! -f .env ]]; then
@@ -40,6 +101,27 @@ fi
 if [[ ! -f .env.inference ]]; then
   cp .env.inference.example .env.inference
   echo "  created .env.inference from example"
+fi
+
+# Honor COMPOSE_PROFILES already containing inference
+# shellcheck disable=SC1091
+set -a
+# shellcheck source=/dev/null
+source .env
+set +a
+
+if echo ",${COMPOSE_PROFILES:-}," | grep -q ",inference,"; then
+  WITH_INFERENCE=true
+fi
+
+if [[ "$WITH_INFERENCE" == true ]]; then
+  echo "==> Edge AI (--with-inference)"
+  merge_compose_profile "registry-db"
+  merge_compose_profile "inference"
+  set_env_in_file .env COMPOSE_PROFILES "$COMPOSE_PROFILES"
+  echo "  COMPOSE_PROFILES=${COMPOSE_PROFILES}"
+  set_env_in_file .env ANX_EDGE_INFERENCE_URL "http://anx-inference:3055"
+  set_env_in_file .env ANX_EDGE_LOCAL_TOKEN_FILE "/app/local_data/edge/local-trust.token"
 fi
 
 echo "==> Secrets (empty values only)"
@@ -99,8 +181,43 @@ if has_profile state || has_profile registry || has_profile registry-db; then
   fi
 fi
 
+if [[ "$WITH_INFERENCE" == true ]]; then
+  mkdir -p data/edge
+  TOKEN_FILE=data/edge/local-trust.token
+  if [[ ! -s "$TOKEN_FILE" ]]; then
+    if command -v openssl >/dev/null 2>&1; then
+      openssl rand -hex 32 > "$TOKEN_FILE"
+    else
+      head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$TOKEN_FILE"
+    fi
+    chmod 600 "$TOKEN_FILE" || true
+    echo "  wrote ${TOKEN_FILE} (local trust; not printed)"
+  else
+    echo "  kept existing ${TOKEN_FILE}"
+  fi
+
+  MONGO_USER="${MONGO_ROOT_USERNAME:-admin}"
+  MONGO_PASS="${MONGO_ROOT_PASSWORD}"
+  MONGODB_URI="mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb:27017/anx_inference?authSource=admin"
+
+  set_inference_env_if_empty ANX_INFERENCE_MODE "asset_edge"
+  set_inference_env_if_empty ANX_ASSETS_NODE_URL "http://anx-assets-node:8080"
+  set_inference_env_if_empty ANX_EDGE_LOCAL_TOKEN_FILE "/edge/local-trust.token"
+  set_inference_env_if_empty APP_HOST "0.0.0.0"
+  set_inference_env_if_empty APP_PORT "${ANX_INFERENCE_PORT:-3055}"
+  set_env_in_file .env.inference MONGODB_URI "$MONGODB_URI"
+  echo "  inference: set MONGODB_URI (from .env Mongo credentials)"
+  set_env_in_file .env.inference REDIS_HOST "redis"
+  set_env_in_file .env.inference REDIS_PORT "6379"
+  set_env_in_file .env.inference REDIS_PASSWORD "$REDIS_PASSWORD"
+  echo "  inference: set REDIS_* (from .env)"
+  set_env_in_file .env.inference SCYLLA_ENABLED "false"
+  set_inference_env_if_empty JWT_ACCESS_SECRET "$(gen_secret)$(gen_secret)"
+  set_inference_env_if_empty JWT_REFRESH_SECRET "$(gen_secret)$(gen_secret)"
+fi
+
 echo "==> data/config/database.yaml (enabled flags match COMPOSE_PROFILES)"
-mkdir -p data/config data/certs data/protocol_mappings data/grafana/provisioning/datasources \
+mkdir -p data/config data/certs data/protocol_mappings data/edge data/grafana/provisioning/datasources \
   data/grafana/provisioning/dashboards data/grafana/dashboards data/prometheus data/mqtt
 
 # Persistent service data under ./volumes (bind mounts — not Docker named volumes)
@@ -115,10 +232,11 @@ mkdir -p \
   volumes/mqtt/data \
   volumes/mqtt/log \
   volumes/nodered \
+  volumes/nodered-io \
   volumes/loki
-echo "  ensured volumes/{victoriametrics,postgres,mongodb,redis,grafana,prometheus,mqtt,nodered,loki}"
+echo "  ensured volumes/{victoriametrics,postgres,mongodb,redis,grafana,prometheus,mqtt,nodered,nodered-io,loki}"
 
-if has_profile oem; then
+if has_profile oem || has_profile oem-io; then
   # shellcheck disable=SC1091
   source .env
   if [[ -n "${MQTT_PASSWORD:-}" ]]; then
@@ -132,9 +250,6 @@ if has_profile oem; then
   fi
 
   # TLS CA + broker cert for Mosquitto 8883 (never commit data/mqtt/certs or private keys).
-  # Equivalent one-liner if regenerating by hand:
-  #   openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout data/mqtt/certs/ca.key \
-  #     -out data/mqtt/certs/ca.crt -subj "/CN=anx-ipc-mqtt-ca"
   mkdir -p data/mqtt/certs
   if [[ ! -f data/mqtt/certs/ca.crt || ! -f data/mqtt/certs/broker.crt || ! -f data/mqtt/certs/broker.key ]]; then
     if command -v openssl >/dev/null 2>&1; then
@@ -142,7 +257,7 @@ if has_profile oem; then
         -keyout data/mqtt/certs/ca.key -out data/mqtt/certs/ca.crt -subj "/CN=anx-ipc-mqtt-ca" 2>/dev/null
       openssl req -newkey rsa:2048 -nodes \
         -keyout data/mqtt/certs/broker.key -out data/mqtt/certs/broker.csr -subj "/CN=localhost" 2>/dev/null
-      printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\n' > data/mqtt/certs/broker.ext
+      printf 'subjectAltName=DNS:localhost,DNS:mqtt,IP:127.0.0.1\nbasicConstraints=CA:FALSE\n' > data/mqtt/certs/broker.ext
       openssl x509 -req -in data/mqtt/certs/broker.csr \
         -CA data/mqtt/certs/ca.crt -CAkey data/mqtt/certs/ca.key -CAcreateserial \
         -out data/mqtt/certs/broker.crt -days 825 -extfile data/mqtt/certs/broker.ext 2>/dev/null
@@ -156,7 +271,6 @@ if has_profile oem; then
     echo "  kept existing data/mqtt/certs"
   fi
 
-  # Point asset-node + clients at mqtts://127.0.0.1:8883 (do not print secrets).
   set_env_if_empty MQTT_BROKER "mqtts://127.0.0.1:8883"
   set_env_if_empty MQTT_CA_FILE "/app/local_data/mqtt/certs/ca.crt"
   set_env_if_empty MQTT_TLS_PORT "8883"
@@ -242,7 +356,6 @@ EOF
 fi
 
 echo "==> Prometheus scrape config"
-# Internal API serves /metrics on INTERNAL_PORT (default 8081), not 9090.
 cat > data/prometheus/prometheus.yml <<EOF
 global:
   scrape_interval: 15s
@@ -323,7 +436,6 @@ providers:
       path: /var/lib/grafana/dashboards
 EOF
 
-# Dashboard JSON (node gauges + VictoriaMetrics up)
 cat > data/grafana/dashboards/anx-asset-node-runtime.json <<'EOF'
 {
   "annotations": { "list": [] },
@@ -518,9 +630,15 @@ fi
 
 echo ""
 echo "Next:"
-echo "  docker compose up -d"
-echo "  # Manual ZIP:  ./import-asset.sh /path/to/portal-setup.zip && docker compose up -d"
-echo "  # USB:         start stack, then put anx-asset-init-<id> on USB at ${USB_ROOT}"
-echo "  # BLE:         start stack with bluetoothd + hci0; pair ANX-NEW in the ANX app"
-echo "  # Inference:   docker compose -f docker-compose.yml -f docker-compose.inference.yml --profile inference up -d"
+if [[ "$WITH_INFERENCE" == true ]]; then
+  echo "  docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d"
+  echo "  Edge AI ready — enable edge_ai on the blueprint, pair the asset, then Force Sync."
+  echo "  Production tip: COMPOSE_PROFILES=registry-db,inference (omit observe/logs)."
+else
+  echo "  docker compose up -d"
+  echo "  # Manual ZIP:  ./import-asset.sh /path/to/portal-setup.zip && docker compose up -d"
+  echo "  # USB:         start stack, then put anx-asset-init-<id> on USB at ${USB_ROOT}"
+  echo "  # BLE:         start stack with bluetoothd + hci0; pair ANX-NEW in the ANX app"
+  echo "  # Edge AI:     ./prepare.sh --with-inference && docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d"
+fi
 echo "Done."

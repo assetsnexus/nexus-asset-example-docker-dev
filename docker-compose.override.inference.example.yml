@@ -1,0 +1,21 @@
+# Optional host device binds for Edge AI live_interface labs (camera / mic / speaker).
+# Copy to docker-compose.override.yml (gitignored) after ./prepare.sh --with-inference:
+#
+#   cp docker-compose.override.inference.example.yml docker-compose.override.yml
+#
+# Adjust device paths for your IPC / Pi. Do not commit override files with secrets.
+
+services:
+  anx-assets-node:
+    devices:
+      - /dev/video0:/dev/video0
+      # - /dev/snd:/dev/snd
+    # group_add:
+    #   - audio
+    #   - video
+
+  anx-inference:
+    # Loopback media stays on the Docker network; host devices are for the asset node.
+    # Uncomment if you run capture inside the inference container instead:
+    # devices:
+    #   - /dev/video0:/dev/video0

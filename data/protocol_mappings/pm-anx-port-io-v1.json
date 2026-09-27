@@ -1,0 +1,54 @@
+{
+  "description": "ANX port IO image. Unit 10 on a slave bus. Four input registers per port: active, error, error_code, power_w. error_code: 0 ok, 1 relay_mismatch, 2 write_failure. Read-only. power_w is signed int16 watts.",
+  "version": "1",
+  "mappings": {
+    "port_aux_qi": {
+      "active": { "register": 0, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.aux-qi.active", "description": "aux-qi active" },
+      "error": { "register": 1, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.aux-qi.error", "description": "aux-qi error" },
+      "error_code": { "register": 2, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.aux-qi.error_code", "description": "aux-qi error_code" },
+      "power_w": { "register": 3, "type": "input", "dataType": "integer", "scale": 1, "signed": true, "metricId": "port.aux-qi.power_w", "description": "aux-qi power_w" }
+    },
+    "port_aux_usbc": {
+      "active": { "register": 4, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.aux-usbc.active", "description": "aux-usbc active" },
+      "error": { "register": 5, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.aux-usbc.error", "description": "aux-usbc error" },
+      "error_code": { "register": 6, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.aux-usbc.error_code", "description": "aux-usbc error_code" },
+      "power_w": { "register": 7, "type": "input", "dataType": "integer", "scale": 1, "signed": true, "metricId": "port.aux-usbc.power_w", "description": "aux-usbc power_w" }
+    },
+    "port_pv_1": {
+      "active": { "register": 8, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.pv-1.active", "description": "pv-1 active" },
+      "error": { "register": 9, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.pv-1.error", "description": "pv-1 error" },
+      "error_code": { "register": 10, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.pv-1.error_code", "description": "pv-1 error_code" },
+      "power_w": { "register": 11, "type": "input", "dataType": "integer", "scale": 1, "signed": true, "metricId": "port.pv-1.power_w", "description": "pv-1 power_w" }
+    },
+    "port_in_1": {
+      "active": { "register": 12, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.in-1.active", "description": "in-1 active" },
+      "error": { "register": 13, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.in-1.error", "description": "in-1 error" },
+      "error_code": { "register": 14, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.in-1.error_code", "description": "in-1 error_code" },
+      "power_w": { "register": 15, "type": "input", "dataType": "integer", "scale": 1, "signed": true, "metricId": "port.in-1.power_w", "description": "in-1 power_w" }
+    },
+    "port_out_a_l1": {
+      "active": { "register": 16, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-a-l1.active", "description": "out-a-l1 active" },
+      "error": { "register": 17, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-a-l1.error", "description": "out-a-l1 error" },
+      "error_code": { "register": 18, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-a-l1.error_code", "description": "out-a-l1 error_code" },
+      "power_w": { "register": 19, "type": "input", "dataType": "integer", "scale": 1, "signed": true, "metricId": "port.out-a-l1.power_w", "description": "out-a-l1 power_w" }
+    },
+    "port_out_a_l2": {
+      "active": { "register": 20, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-a-l2.active", "description": "out-a-l2 active" },
+      "error": { "register": 21, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-a-l2.error", "description": "out-a-l2 error" },
+      "error_code": { "register": 22, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-a-l2.error_code", "description": "out-a-l2 error_code" },
+      "power_w": { "register": 23, "type": "input", "dataType": "integer", "scale": 1, "signed": true, "metricId": "port.out-a-l2.power_w", "description": "out-a-l2 power_w" }
+    },
+    "port_out_a_l3": {
+      "active": { "register": 24, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-a-l3.active", "description": "out-a-l3 active" },
+      "error": { "register": 25, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-a-l3.error", "description": "out-a-l3 error" },
+      "error_code": { "register": 26, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-a-l3.error_code", "description": "out-a-l3 error_code" },
+      "power_w": { "register": 27, "type": "input", "dataType": "integer", "scale": 1, "signed": true, "metricId": "port.out-a-l3.power_w", "description": "out-a-l3 power_w" }
+    },
+    "port_out_b_red_cee": {
+      "active": { "register": 28, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-b-red-cee.active", "description": "out-b-red-cee active" },
+      "error": { "register": 29, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-b-red-cee.error", "description": "out-b-red-cee error" },
+      "error_code": { "register": 30, "type": "input", "dataType": "integer", "scale": 1, "signed": false, "metricId": "port.out-b-red-cee.error_code", "description": "out-b-red-cee error_code" },
+      "power_w": { "register": 31, "type": "input", "dataType": "integer", "scale": 1, "signed": true, "metricId": "port.out-b-red-cee.power_w", "description": "out-b-red-cee power_w" }
+    }
+  }
+}

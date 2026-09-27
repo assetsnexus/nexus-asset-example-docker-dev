@@ -14,9 +14,18 @@ cd anx-public-examples/asset-node-ipc-docker
 docker compose up -d
 ```
 
+**Full Edge AI** (asset node + Mongo/Redis + on-device `anx-inference` sidecar):
+
+```bash
+./prepare.sh --with-inference
+docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
+```
+
 Then register the asset with **one** of the three init paths below.
 
 Pulls `eu1.dockerreg.sdk.assetsnexus.org/anx-assets-node:latest` (multi-arch amd64/arm64). Do **not** set `DOCKER_DEFAULT_PLATFORM` unless you are cross-deploying — forcing `linux/amd64` on a Pi causes `exec format error`.
+
+Edge AI also pulls `eu1.dockerreg.sdk.assetsnexus.org/anx-inference-backend:latest`. A later publish step must produce that image with `ANX_INFERENCE_MODE=asset_edge` support (Mongo+Redis edge storage profile). Until then, compose validates but the container will not run agents.
 
 ## Which containers are required vs optional
 
@@ -30,8 +39,9 @@ Pulls `eu1.dockerreg.sdk.assetsnexus.org/anx-assets-node:latest` (multi-arch amd
 | Grafana | `observe` | **Dev only** | Local dashboards. Production assets use Nexus APIs and **portal** dashboards |
 | Prometheus + node-exporter | `observe` | **Dev only** | Scrapes the node `/metrics` endpoint for local Grafana. Not needed in production (same: portal / Nexus) |
 | Loki | `logs` | **Dev only** | Local log aggregation. Not required on production assets |
+| `anx-inference` | `inference` | Optional (Edge AI) | On-device asset_edge sidecar. Needs `registry-db`. Start via `./prepare.sh --with-inference` |
 
-**Production tip:** run with `COMPOSE_PROFILES=registry-db` (or empty) — omit `observe` and `logs`. Add `oem` only if you need MQTT and/or Node-RED on the box.
+**Production tip:** run with `COMPOSE_PROFILES=registry-db` (or empty) — omit `observe` and `logs`. Add `oem` only if you need MQTT and/or Node-RED on the box. For Edge AI without lab dashboards: `COMPOSE_PROFILES=registry-db,inference`.
 
 Default in `.env.example` includes `observe` for a convenient lab/dev box:
 
@@ -111,20 +121,56 @@ When `observe` is enabled, `prepare.sh` provisions:
 
 UI: `http://<ipc>:${GRAFANA_PORT:-3001}` (admin password from `.env` after `prepare.sh`).
 
-## Optional on-device inference (not wired)
+## On-device Edge AI (anx-inference sidecar)
 
-If the blueprint **Deployment → Local agents** toggle is enabled, an `anx-inference` sidecar is *expected* on the IPC. Start the placeholder:
+When the blueprint has **`edge_ai.runtime.enabled`** (or a synonym that enables that flag), the asset node expects a local `anx-inference` sidecar on the IPC.
+
+### One-command full setup
 
 ```bash
-cp .env.inference.example .env.inference   # if missing
-docker compose -f docker-compose.yml -f docker-compose.inference.yml --profile inference up -d
+./prepare.sh --with-inference
+docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
 ```
 
-This does **not** run agents, models, or a region bridge yet — replace the image/command when on-device inference is implemented. When wired, it can reuse the asset stack’s MongoDB/Redis (`registry-db`); it does not need Grafana/Prometheus/Loki.
+`prepare.sh --with-inference` (also when `COMPOSE_PROFILES` already contains `inference`):
+
+1. Ensures `.env.inference` from the example.
+2. Sets `COMPOSE_PROFILES` to include `registry-db` and `inference`.
+3. Writes a local trust token to `./data/edge/local-trust.token` (gitignored) and points both the asset node and inference at it.
+4. Writes `ANX_INFERENCE_MODE=asset_edge`, Mongo/Redis URLs for the compose siblings, and `ANX_ASSETS_NODE_URL=http://anx-assets-node:8080`.
+5. Prints: "Edge AI ready — enable edge_ai on the blueprint, pair the asset, then Force Sync."
+
+After pairing: **Force Sync** → portal Asset → Edge AI page should show `runtime: detected` and agents applied once the published image supports `asset_edge`.
+
+**Images (publish step, not done in this example):**
+
+| Image | Tag | Notes |
+|-------|-----|--------|
+| `eu1.dockerreg.sdk.assetsnexus.org/anx-assets-node` | `latest` | Must understand `ANX_EDGE_INFERENCE_URL` + local trust file |
+| `eu1.dockerreg.sdk.assetsnexus.org/anx-inference-backend` | `latest` | Must understand `ANX_INFERENCE_MODE=asset_edge` (Mongo+Redis only) |
+
+Host camera/mic for `live_interface` labs: copy `docker-compose.override.inference.example.yml` → `docker-compose.override.yml` (gitignored).
+
+### Acceptance (Edge AI)
+
+| Setup | Pass |
+|-------|------|
+| `./prepare.sh --with-inference` + blueprint `edge_ai.runtime.enabled` + Force Sync | Heartbeat `edgeAi.state=ok` (or `runtime: detected`) within a few minutes of Force Sync once images are published |
+
+### Troubleshooting (Edge AI)
+
+| Symptom | Likely cause |
+|---------|----------------|
+| Inference up but `runtime: missing` | `ANX_EDGE_INFERENCE_URL` / token file mismatch between node and inference |
+| Inference exits on start | Mongo/Redis not in profiles — rerun `./prepare.sh --with-inference` |
+| `exec format error` on inference | Wrong arch image; same fix as asset node (multi-arch / unset `DOCKER_DEFAULT_PLATFORM`) |
+| Placeholder / mode ignored | Published `anx-inference-backend:latest` does not yet include `asset_edge` — wait for the publish step |
 
 ## OEM / Node-RED (`oem`)
 
 Enable profile `oem` for **Mosquitto** and **Node-RED** when you want prototype or site business logic next to the asset (flows calling REST/gRPC/WebSocket). Both are optional consumers — the asset node runs without them. You can also point a custom OEM app at `SERVER_PORT` / `GRPC_PORT` / `WEBSOCKET_PORT` without Node-RED.
+
+Profile `oem-io` starts Mosquitto and a separate Node-RED service (`nodered-io`, host port 1881) with `flows/port-io.json`. The flow subscribes to `anx/<assetId>/port/<portId>/{active,error}` and publishes `relay_state` plus green and red LED topics. The broker is TLS on `mqtt:8883`. Set the `ipc-mqtt` node user to `anx` and the password from `prepare.sh` in the Node-RED editor — the flow file does not store credentials. The CA is mounted at `/certs/ca.crt`. Unit 10 of the Modbus slave reads `data/protocol_mappings/pm-anx-port-io-v1.json`.
 
 ## Acceptance runbook (3 assets, 3 types, 3 init paths)
 
@@ -164,9 +210,13 @@ Physical phone/USB stick may not be available in CI — confirm with node logs (
 | Path | Role |
 |------|------|
 | `docker-compose.yml` | Main stack + profiles |
-| `docker-compose.inference.yml` | Optional inference placeholder |
-| `prepare.sh` | Secrets, database.yaml, Grafana/Prometheus, readiness probes |
+| `docker-compose.inference.yml` | Edge AI `anx-inference` sidecar (`asset_edge`) |
+| `docker-compose.override.inference.example.yml` | Optional host camera/mic binds |
+| `prepare.sh` | Secrets, database.yaml, Grafana/Prometheus, `--with-inference` |
 | `import-asset.sh` | Apply portal ZIP without clobbering secrets |
-| `.env.example` | Documented defaults |
-| `data/` | Bind-mounted `LOCAL_DATA_PATH` (config, certs, grafana provisioning) |
+| `.env.example` | Documented defaults (no secrets) |
+| `.env.inference.example` | Edge sidecar env template |
+| `flows/port-io.json` | Node-RED port-io flow (`oem-io`) |
+| `data/protocol_mappings/` | OEM protocol mapping JSON |
+| `data/` | Bind-mounted `LOCAL_DATA_PATH` (config, certs, edge trust, grafana) |
 | `volumes/` | Bind-mounted persistent data for DBs / Grafana / MQTT / etc. (gitignored content) |
