@@ -96,6 +96,29 @@ After `docker compose up -d`, the node logs `awaiting provisioning` until it has
 
 If BLE hardware or D-Bus is missing, the node keeps USB and manual paths working.
 
+## Region and registry endpoints
+
+Pairing writes `data/config/region-registration.yaml`. Day to day you do not type a region URL. The portal ZIP, the USB init folder, and Bluetooth provisioning all carry the same list.
+
+**Edge (this IPC, one asset).** `regionNode.endpoints` is every public origin of the region: the node’s `publicEndpoints` plus `publicUrl` and `alternativeUrls`. `assetsRegistry.endpoints` is every registry `publicEndpoints` entry plus every **enabled** `endpointConfigs` URL (intranet and online). A dev box that must point at an intranet registry and an online region at the same time is the exception: edit those two lists in `data/config/region-registration.yaml` after import. Leave them alone after a normal pair.
+
+**Registry mode** (this process registers as an assets registry, `regionNode.assetsRegistryId` set, `assetsRegistry.enabled` false). Set `regionNode.endpoints` to the region origins to register into. Example and default seed:
+
+```yaml
+regionNode:
+  assetsRegistryId: <registry-integration-id>
+  endpointProbeIntervalSec: 300
+  endpoints:
+    - host: 1.west.eu.region.sandbox.assetsnexus.org
+      port: 443
+      tls: true
+      mode: rest
+```
+
+`https://1.west.eu.region.sandbox.assetsnexus.org` is the sandbox seed. Add further origins as more list entries.
+
+The node picks the lowest-latency origin that answers `GET /health`. While that origin stays up, it probes the full list **once every 5 minutes** (`endpointProbeIntervalSec`, default 300). Heartbeats (60s) go only to the winner and do not fan out. If the winner fails, it probes immediately and fails over. A URL that appears only inside a health response is used when its certificate chains to `caCert` (`../certs/region-ca.crt` from the pairing bundle). Health JSON cannot send the node to an arbitrary host.
+
 ## After pairing: blueprint sync from the registry
 
 Pairing / init only boots identity and region (or assets-registry) connectivity. Once the asset is registered and online it **pulls its blueprint configuration and other relevant instance data** from the region / assets registry on the normal heartbeat / config-sync path (`clonedConfigs`, endpoints, jobs, offerings, etc.). You do not hand-maintain a full config tree on the IPC for day-to-day operation — the digital twin on Nexus is the source of truth; Force Sync in the portal can push an immediate pull.
