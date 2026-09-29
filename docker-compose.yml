@@ -224,13 +224,18 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        chown mosquitto:mosquitto /mosquitto/config/passwd /mosquitto/data /mosquitto/log
-        chmod 600 /mosquitto/config/passwd
+        chown mosquitto:mosquitto /mosquitto/config/passwd /mosquitto/data /mosquitto/log \
+          /mosquitto/certs /mosquitto/certs/broker.key /mosquitto/certs/broker.crt /mosquitto/certs/ca.crt
+        chmod 600 /mosquitto/config/passwd /mosquitto/certs/broker.key
+        chmod 755 /mosquitto/certs
+        chmod 644 /mosquitto/certs/broker.crt /mosquitto/certs/ca.crt
         exec su -s /bin/sh mosquitto -c '/usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf'
     volumes:
       - ./data/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./data/mqtt/passwd:/mosquitto/config/passwd
-      - ./data/mqtt/certs:/mosquitto/certs:ro
+      # Read-write so startup can chown broker.key to uid 1883. A :ro mount
+      # leaves a root-owned mode 600 key, which mosquitto cannot open.
+      - ./data/mqtt/certs:/mosquitto/certs
       - ./volumes/mqtt/data:/mosquitto/data
       - ./volumes/mqtt/log:/mosquitto/log
     healthcheck:
