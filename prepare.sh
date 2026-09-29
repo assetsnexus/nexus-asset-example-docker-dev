@@ -251,25 +251,63 @@ echo "==> data/config/database.yaml (enabled flags match COMPOSE_PROFILES)"
 mkdir -p data/config data/certs data/protocol_mappings data/edge data/grafana/provisioning/datasources \
   data/grafana/provisioning/dashboards data/grafana/dashboards data/prometheus data/mqtt
 
-# Persistent service data under ./volumes (bind mounts — not Docker named volumes)
-mkdir -p \
-  volumes/victoriametrics \
-  volumes/postgres/data \
-  volumes/mongodb/data \
-  volumes/mongodb/config \
-  volumes/redis \
-  volumes/grafana \
-  volumes/prometheus \
-  volumes/mqtt/data \
-  volumes/mqtt/log \
-  volumes/nodered \
-  volumes/nodered-io \
-  volumes/loki
+# Persistent service data under ./volumes (bind mounts — not Docker named volumes).
+# An earlier container often creates ./volumes as root, so mkdir as this user fails.
+ensure_volume_dirs() {
+  local rel=(
+    victoriametrics
+    postgres/data
+    mongodb/data
+    mongodb/config
+    redis
+    grafana
+    prometheus
+    mqtt/data
+    mqtt/log
+    nodered
+    nodered-io
+    loki
+  )
+  local d missing=0
+  mkdir -p volumes 2>/dev/null || true
+  for d in "${rel[@]}"; do
+    if [[ -d "volumes/$d" ]]; then
+      continue
+    fi
+    if ! mkdir -p "volumes/$d" 2>/dev/null; then
+      missing=1
+    fi
+  done
+  if [[ "$missing" -eq 0 ]]; then
+    return 0
+  fi
+  echo "  volume dirs are owned by root; creating them via docker"
+  docker run --rm --user 0:0 \
+    -v "$PWD/volumes:/volumes" \
+    postgres:16-alpine \
+    mkdir -p \
+      /volumes/victoriametrics \
+      /volumes/postgres/data \
+      /volumes/mongodb/data \
+      /volumes/mongodb/config \
+      /volumes/redis \
+      /volumes/grafana \
+      /volumes/prometheus \
+      /volumes/mqtt/data \
+      /volumes/mqtt/log \
+      /volumes/nodered \
+      /volumes/nodered-io \
+      /volumes/loki
+}
+ensure_volume_dirs
 echo "  ensured volumes/{victoriametrics,postgres,mongodb,redis,grafana,prometheus,mqtt,nodered,nodered-io,loki}"
 # Older compose mounted volumes/postgres itself. A finished cluster lives next to PG_VERSION.
 if [[ -f volumes/postgres/PG_VERSION && ! -f volumes/postgres/data/PG_VERSION ]]; then
   echo "  moving Postgres cluster into volumes/postgres/data"
-  find volumes/postgres -mindepth 1 -maxdepth 1 ! -name data -exec mv {} volumes/postgres/data/ \;
+  docker run --rm --user 0:0 \
+    -v "$PWD/volumes/postgres:/pg" \
+    postgres:16-alpine \
+    sh -c 'find /pg -mindepth 1 -maxdepth 1 ! -name data -exec mv {} /pg/data/ \;'
 fi
 
 if has_profile oem || has_profile oem-io; then
