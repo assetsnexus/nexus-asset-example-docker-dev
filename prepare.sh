@@ -267,6 +267,7 @@ ensure_volume_dirs() {
     nodered
     nodered-io
     loki
+    inference
   )
   local d missing=0
   mkdir -p volumes 2>/dev/null || true
@@ -297,10 +298,19 @@ ensure_volume_dirs() {
       /volumes/mqtt/log \
       /volumes/nodered \
       /volumes/nodered-io \
-      /volumes/loki
+      /volumes/loki \
+      /volumes/inference
 }
 ensure_volume_dirs
-echo "  ensured volumes/{victoriametrics,postgres,mongodb,redis,grafana,prometheus,mqtt,nodered,nodered-io,loki}"
+echo "  ensured volumes/{victoriametrics,postgres,mongodb,redis,grafana,prometheus,mqtt,nodered,nodered-io,loki,inference}"
+# anx-inference runs as uid 1000 and mkdir's DATA_DIR/input. A root-owned bind mount is EACCES.
+if has_profile inference; then
+  docker run --rm --user 0:0 \
+    -v "$PWD/volumes/inference:/data" \
+    postgres:16-alpine \
+    sh -c 'mkdir -p /data/input /data/output /data/exports && chown -R 1000:1000 /data'
+  echo "  volumes/inference owned by uid 1000"
+fi
 # Older compose mounted volumes/postgres itself. A finished cluster lives next to PG_VERSION.
 if [[ -f volumes/postgres/PG_VERSION && ! -f volumes/postgres/data/PG_VERSION ]]; then
   echo "  moving Postgres cluster into volumes/postgres/data"
@@ -404,7 +414,7 @@ database:
       connectionMode: round_robin
       redis:
         db: 0
-        keyPrefix: anx:
+        keyPrefix: "anx:"
 EOF
 echo "  wrote data/config/database.yaml (registry-db=${REG_DB})"
 

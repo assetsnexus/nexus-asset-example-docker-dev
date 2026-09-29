@@ -24,6 +24,8 @@ services:
       - ANX_EDGE_LOCAL_TOKEN_FILE=/edge/local-trust.token
     volumes:
       - ./data/edge:/edge:ro
+      # Image runs as uid 1000 (node). Default DATA_DIR is /data.
+      - ./volumes/inference:/data
     networks:
       - default
     ports:
