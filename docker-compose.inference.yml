@@ -7,8 +7,16 @@
 # Host camera/mic for live_interface labs: copy docker-compose.override.inference.example.yml
 # to docker-compose.override.yml (gitignored) and adjust device binds.
 
+# 3 x 100MB = 300MB of json logs per container.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "3"
+
 services:
   anx-inference:
+    logging: *default-logging
     image: ${ANX_INFERENCE_IMAGE:-eu1.dockerreg.sdk.assetsnexus.org/nexus/inference/anx.inference.backend}:${ANX_INFERENCE_TAG:-0.1.3}
     container_name: anx-ipc-inference
     restart: unless-stopped
@@ -60,6 +68,7 @@ services:
     #           capabilities: [gpu]
 
   minio:
+    logging: *default-logging
     image: docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z
     container_name: anx-ipc-minio
     restart: unless-stopped
@@ -82,6 +91,7 @@ services:
       start_period: 15s
 
   minio-init:
+    logging: *default-logging
     image: docker.io/pgsty/mc:RELEASE.2026-09-16T00-00-00Z
     container_name: anx-ipc-minio-init
     profiles: ["inference"]

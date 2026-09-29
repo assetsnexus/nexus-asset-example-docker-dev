@@ -9,8 +9,16 @@
 # Profiles (COMPOSE_PROFILES in .env): registry-db, observe, oem, oem-io, logs, inference
 # Always on: anx-assets-node + victoriametrics
 
+# 3 x 100MB = 300MB of json logs per container.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "3"
+
 services:
   anx-assets-node:
+    logging: *default-logging
     image: ${ANX_ASSETS_NODE_IMAGE:-eu1.dockerreg.sdk.assetsnexus.org/anx.asset.node}:${ANX_ASSETS_NODE_TAG:-latest}
     # Omit platform: so Docker pulls the host architecture (Pi arm64 vs PC amd64).
     container_name: anx-assets-node-ipc
@@ -60,6 +68,7 @@ services:
       start_period: 40s
 
   victoriametrics:
+    logging: *default-logging
     image: victoriametrics/victoria-metrics:latest
     container_name: anx-ipc-victoriametrics
     restart: unless-stopped
@@ -78,6 +87,7 @@ services:
       retries: 3
 
   postgres:
+    logging: *default-logging
     profiles: ["registry-db"]
     image: postgres:16-alpine
     container_name: anx-ipc-postgres
@@ -102,6 +112,7 @@ services:
       start_period: 10s
 
   mongodb:
+    logging: *default-logging
     profiles: ["registry-db"]
     image: mongo:7
     container_name: anx-ipc-mongodb
@@ -129,6 +140,7 @@ services:
       start_period: 40s
 
   redis:
+    logging: *default-logging
     profiles: ["registry-db", "state"]
     image: redis:7-alpine
     container_name: anx-ipc-redis
@@ -151,6 +163,7 @@ services:
       start_period: 5s
 
   grafana:
+    logging: *default-logging
     profiles: ["observe"]
     image: grafana/grafana:latest
     container_name: anx-ipc-grafana
@@ -176,6 +189,7 @@ services:
       retries: 3
 
   prometheus:
+    logging: *default-logging
     profiles: ["observe"]
     image: prom/prometheus:latest
     container_name: anx-ipc-prometheus
@@ -193,6 +207,7 @@ services:
       - anx-assets-node
 
   node-exporter:
+    logging: *default-logging
     profiles: ["observe"]
     image: prom/node-exporter:latest
     container_name: anx-ipc-node-exporter
@@ -211,6 +226,7 @@ services:
       - "${NODE_EXPORTER_PORT:-9100}:9100"
 
   mqtt:
+    logging: *default-logging
     profiles: ["oem", "oem-io"]
     image: eclipse-mosquitto:latest
     container_name: anx-ipc-mqtt
@@ -250,6 +266,7 @@ services:
       start_period: 20s
 
   nodered:
+    logging: *default-logging
     profiles: ["oem"]
     image: nodered/node-red:latest
     container_name: anx-ipc-nodered
@@ -270,6 +287,7 @@ services:
       retries: 3
 
   nodered-io:
+    logging: *default-logging
     profiles: ["oem-io"]
     image: nodered/node-red:latest
     container_name: anx-ipc-nodered-io
@@ -292,6 +310,7 @@ services:
       retries: 3
 
   loki:
+    logging: *default-logging
     profiles: ["logs"]
     image: grafana/loki:latest
     container_name: anx-ipc-loki

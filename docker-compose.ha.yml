@@ -3,20 +3,30 @@
 # (openssl rand -base64 32, identical on both nodes) before running compose.
 # redis-standby is a warm copy for manual failover; it is read-only, so the
 # nodes always write to redis-primary.
+# 3 x 100MB = 300MB of json logs per container.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "3"
+
 services:
   redis-primary:
+    logging: *default-logging
     image: redis:7-alpine
     command: redis-server --appendonly yes --requirepass ${ANX_REDIS_PASSWORD:?set ANX_REDIS_PASSWORD} --bind 0.0.0.0
     ports:
       - "127.0.0.1:36379:6379"
 
   redis-standby:
+    logging: *default-logging
     image: redis:7-alpine
     command: redis-server --appendonly yes --requirepass ${ANX_REDIS_PASSWORD:?set ANX_REDIS_PASSWORD} --replicaof redis-primary 6379 --masterauth ${ANX_REDIS_PASSWORD:?set ANX_REDIS_PASSWORD}
     depends_on:
       - redis-primary
 
   asset-a:
+    logging: *default-logging
     image: anx.asset.node:latest
     environment:
       OPERATION_MODE: single_asset
@@ -27,6 +37,7 @@ services:
       - redis-primary
 
   asset-b:
+    logging: *default-logging
     image: anx.asset.node:latest
     environment:
       OPERATION_MODE: single_asset
