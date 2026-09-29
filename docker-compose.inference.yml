@@ -1,8 +1,6 @@
 # On-device Edge AI — anx-inference sidecar (asset_edge mode).
 #
-# Full setup (default when you want agents on the IPC):
-#   ./prepare.sh --with-inference
-#   docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
+# Included by ./up.sh (COMPOSE_FILE + inference profile). No manual env edits.
 #
 # Requires COMPOSE_PROFILES to include registry-db (Mongo + Redis) and inference.
 # GPU: uncomment deploy.resources and use an NVIDIA host + nvidia-container-toolkit.
@@ -35,6 +33,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_healthy
       anx-assets-node:
         condition: service_started
     healthcheck:
@@ -56,3 +56,41 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
+
+  minio:
+    image: minio/minio:latest
+    container_name: anx-ipc-minio
+    restart: unless-stopped
+    profiles: ["inference"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-anx}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD via ./up.sh}
+      MC_HOST_local: http://${MINIO_ROOT_USER:-anx}:${MINIO_ROOT_PASSWORD}@127.0.0.1:9000
+    volumes:
+      - ./volumes/minio:/data
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-39000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-39001}:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: anx-ipc-minio-init
+    profiles: ["inference"]
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-anx}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD via ./up.sh}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && mc mb --ignore-existing local/inference

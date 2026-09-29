@@ -6,13 +6,19 @@ GitHub-ready Docker Compose example for running **one** [anx-assets-node](https:
 
 Windows is untested.
 
-## Quick start
+## Ship (one command)
+
+OEM state, no env edits: **single-asset** node, databases, Mosquitto, and **anx-inference** (Mongo, Redis, MinIO, JWT, local trust token filled by `./up.sh`). Services are running and **waiting for pairing**.
 
 ```bash
-cd anx-public-examples/asset-node-ipc-docker
-./prepare.sh
-docker compose up -d
+git clone https://github.com/assetsnexus/nexus-asset-example-docker-dev.git
+cd nexus-asset-example-docker-dev
+./up.sh
 ```
+
+Then start the robot sidecar (`./up.sh` in [asset-demo-pirobot-sidecar](https://github.com/assetsnexus/nexus-asset-pirobot-sidecar)), then pair with **one** of the four methods below.
+
+`./up.sh` writes `.env` from the example when it is missing, generates secrets, and runs `docker compose up -d`. Defaults are `OPERATION_MODE=single_asset` and profiles `registry-db,oem,inference`. Lab dashboards stay off unless you add `observe`.
 
 **Full Edge AI** (asset node + Mongo/Redis + on-device `anx-inference` sidecar):
 
@@ -123,8 +129,7 @@ Copy-paste start as an edge node:
 ```bash
 git clone https://github.com/assetsnexus/nexus-asset-example-docker-dev.git
 cd nexus-asset-example-docker-dev
-./prepare.sh          # generates certs/secrets under data/ (and profiles)
-docker compose up -d
+./up.sh
 ```
 
 `prepare.sh` is the init shell script that writes local secrets and readiness checks (including whether the USB path / BLE adapter exist). Then pair with **one** of the four options above.

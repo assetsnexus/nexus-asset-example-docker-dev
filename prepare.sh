@@ -214,6 +214,21 @@ if [[ "$WITH_INFERENCE" == true ]]; then
   set_env_in_file .env.inference SCYLLA_ENABLED "false"
   set_inference_env_if_empty JWT_ACCESS_SECRET "$(gen_secret)$(gen_secret)"
   set_inference_env_if_empty JWT_REFRESH_SECRET "$(gen_secret)$(gen_secret)"
+
+  set_env_if_empty MINIO_ROOT_USER "anx"
+  set_env_if_empty MINIO_ROOT_PASSWORD "$(gen_secret)"
+  # shellcheck disable=SC1091
+  source .env
+  set_env_in_file .env.inference MINIO_ROOT_USER "${MINIO_ROOT_USER}"
+  set_env_in_file .env.inference MINIO_ROOT_PASSWORD "${MINIO_ROOT_PASSWORD}"
+  set_env_in_file .env.inference S3_ENDPOINT "http://minio:9000"
+  set_env_in_file .env.inference S3_FORCE_PATH_STYLE "true"
+  set_env_in_file .env.inference S3_BUCKET "inference"
+  set_env_in_file .env.inference AWS_ACCESS_KEY_ID "${MINIO_ROOT_USER}"
+  set_env_in_file .env.inference AWS_SECRET_ACCESS_KEY "${MINIO_ROOT_PASSWORD}"
+  set_env_in_file .env.inference AWS_REGION "us-east-1"
+  echo "  inference: set MinIO/S3 credentials (password not printed)"
+  mkdir -p volumes/minio
 fi
 
 echo "==> data/config/database.yaml (enabled flags match COMPOSE_PROFILES)"
