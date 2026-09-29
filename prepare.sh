@@ -254,7 +254,7 @@ mkdir -p data/config data/certs data/protocol_mappings data/edge data/grafana/pr
 # Persistent service data under ./volumes (bind mounts — not Docker named volumes)
 mkdir -p \
   volumes/victoriametrics \
-  volumes/postgres \
+  volumes/postgres/data \
   volumes/mongodb/data \
   volumes/mongodb/config \
   volumes/redis \
@@ -266,19 +266,36 @@ mkdir -p \
   volumes/nodered-io \
   volumes/loki
 echo "  ensured volumes/{victoriametrics,postgres,mongodb,redis,grafana,prometheus,mqtt,nodered,nodered-io,loki}"
+# Older compose mounted volumes/postgres itself. A finished cluster lives next to PG_VERSION.
+if [[ -f volumes/postgres/PG_VERSION && ! -f volumes/postgres/data/PG_VERSION ]]; then
+  echo "  moving Postgres cluster into volumes/postgres/data"
+  find volumes/postgres -mindepth 1 -maxdepth 1 ! -name data -exec mv {} volumes/postgres/data/ \;
+fi
 
 if has_profile oem || has_profile oem-io; then
   # shellcheck disable=SC1091
   source .env
-  if [[ -n "${MQTT_PASSWORD:-}" ]]; then
-    if command -v mosquitto_passwd >/dev/null 2>&1; then
-      mosquitto_passwd -b -c data/mqtt/passwd anx "${MQTT_PASSWORD}"
-      echo "  wrote data/mqtt/passwd for user anx"
-    else
-      echo "WARN: mosquitto_passwd not on host. Install mosquitto-clients and rerun prepare, or:" >&2
-      echo "  docker run --rm -v \"\$PWD/data/mqtt:/cfg\" eclipse-mosquitto:2 mosquitto_passwd -b -c /cfg/passwd anx \"\$MQTT_PASSWORD\"" >&2
-    fi
+  if [[ -z "${MQTT_PASSWORD:-}" ]]; then
+    echo "ERROR: MQTT_PASSWORD is empty" >&2
+    exit 1
   fi
+  # A missing source path is created by Docker as a directory, and Mosquitto
+  # then exits with "passwd is not a file".
+  if [[ -d data/mqtt/passwd ]]; then
+    rm -rf data/mqtt/passwd
+    echo "  removed data/mqtt/passwd directory left by a missing-file mount"
+  fi
+  if command -v mosquitto_passwd >/dev/null 2>&1; then
+    mosquitto_passwd -b -c data/mqtt/passwd anx "${MQTT_PASSWORD}"
+  else
+    docker run --rm \
+      -v "$PWD/data/mqtt:/cfg" \
+      --user 0:0 \
+      eclipse-mosquitto:latest \
+      mosquitto_passwd -b -c /cfg/passwd anx "${MQTT_PASSWORD}"
+  fi
+  chmod 600 data/mqtt/passwd
+  echo "  wrote data/mqtt/passwd for user anx"
 
   # TLS CA + broker cert for Mosquitto 8883 (never commit data/mqtt/certs or private keys).
   mkdir -p data/mqtt/certs

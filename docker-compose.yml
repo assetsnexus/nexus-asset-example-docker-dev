@@ -89,7 +89,9 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DATABASE:-anx_assets}
     volumes:
-      - ./volumes/postgres:/var/lib/postgresql/data
+      # Subdirectory, not the mount root. initdb refuses a data dir that
+      # already contains a hidden file (typical of a bind-mount point).
+      - ./volumes/postgres/data:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-35432}:5432"
     healthcheck:
@@ -215,9 +217,16 @@ services:
     restart: unless-stopped
     ports:
       - "${MQTT_TLS_PORT:-28883}:8883"
+    # passwd is read-write so this start can chown it to the mosquitto user.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        chown mosquitto:mosquitto /mosquitto/config/passwd /mosquitto/data /mosquitto/log
+        chmod 600 /mosquitto/config/passwd
+        exec su-exec mosquitto /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf
     volumes:
       - ./data/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - ./data/mqtt/passwd:/mosquitto/config/passwd:ro
+      - ./data/mqtt/passwd:/mosquitto/config/passwd
       - ./data/mqtt/certs:/mosquitto/certs:ro
       - ./volumes/mqtt/data:/mosquitto/data
       - ./volumes/mqtt/log:/mosquitto/log
