@@ -218,13 +218,15 @@ services:
     ports:
       - "${MQTT_TLS_PORT:-28883}:8883"
     # passwd is read-write so this start can chown it to the mosquitto user.
-    # su-exec is not on PATH in eclipse-mosquitto:latest (exit 127). BusyBox su is.
+    # The mosquitto account shell is /sbin/nologin, so plain `su` exits with
+    # "This account is not available". -s /bin/sh overrides that. su-exec is
+    # not in eclipse-mosquitto:latest.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         chown mosquitto:mosquitto /mosquitto/config/passwd /mosquitto/data /mosquitto/log
         chmod 600 /mosquitto/config/passwd
-        exec su mosquitto -c '/usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf'
+        exec su -s /bin/sh mosquitto -c '/usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf'
     volumes:
       - ./data/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./data/mqtt/passwd:/mosquitto/config/passwd

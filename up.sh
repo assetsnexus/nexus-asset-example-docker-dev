@@ -150,6 +150,8 @@ check_stack() {
 }
 
 echo "==> Starting stack"
+# The Pi keeps a local copy of the tag. Compose will not replace it unless we pull.
+docker compose pull anx-inference
 if ! docker compose up -d --wait --wait-timeout 180; then
   echo "Compose did not reach a running stack." >&2
   docker compose ps -a >&2 || true
