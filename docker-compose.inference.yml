@@ -58,7 +58,7 @@ services:
     #           capabilities: [gpu]
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: anx-ipc-minio
     restart: unless-stopped
     profiles: ["inference"]
@@ -80,7 +80,7 @@ services:
       start_period: 15s
 
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     container_name: anx-ipc-minio-init
     profiles: ["inference"]
     restart: "no"
