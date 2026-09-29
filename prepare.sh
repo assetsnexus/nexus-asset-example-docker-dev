@@ -363,7 +363,7 @@ echo "  wrote data/config/database.yaml (registry-db=${REG_DB})"
 
 if [[ ! -f data/config/general.yml ]]; then
   cat > data/config/general.yml <<EOF
-mode: single_asset
+mode: SingleAsset
 single_asset_dir: ${SINGLE_ASSET_DIR:-asset-local}
 server:
   host: "0.0.0.0"
@@ -384,6 +384,11 @@ frontend:
   port: 3000
 EOF
   echo "  wrote data/config/general.yml (default; import-asset.sh may overwrite)"
+fi
+# The node enum is SingleAsset / MultiTenant. OPERATION_MODE in .env stays single_asset.
+if [[ -f data/config/general.yml ]] && grep -q '^mode: single_asset$' data/config/general.yml; then
+  sed -i 's|^mode: single_asset$|mode: SingleAsset|' data/config/general.yml
+  echo "  general.yml mode set to SingleAsset"
 fi
 
 echo "==> Prometheus scrape config"
