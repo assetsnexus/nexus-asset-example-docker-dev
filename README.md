@@ -114,10 +114,18 @@ Use when the stack is already up (`./prepare.sh && docker compose up -d`) and yo
 ```bash
 curl -sS -X POST http://127.0.0.1:28480/command/anx.asset.pairing.redeem \
   -H 'content-type: application/json' \
-  -d '{"payload":{"url":"https://REGISTRY_URL/api/public/asset-pairing/redeem","token":"TOKEN","role":"primary"}}'
+  -d '{"command":"anx.asset.pairing.redeem","payload":{"url":"https://REGISTRY_URL/api/public/asset-pairing/redeem","token":"TOKEN","role":"primary"}}'
 ```
 
 Replace `REGISTRY_URL` with a registry origin from the wizard (full path ends with `/api/public/asset-pairing/redeem`); replace `TOKEN` with the one-time secret. Do **not** paste a region public URL. Use `"role":"secondary"` only when pairing an HA replica after a primary already exists.
+
+If the registry HTTPS certificate is signed by your own CA, copy that PEM to `data/certs/registry-ca.crt` and add optional `caFile` (path inside the container). Pass `caPem` instead when you want the PEM inline. Use one of the two, not both. On success the node stores it as `data/certs/custom-ca.crt` and points `assetsRegistry.caCert` at that file. To skip verification instead, add `"ignoreSslErrors":true`. That is stored as `assetsRegistry.ignoreSslErrors` for later registry calls. See the anx-assets-node README section **Custom CAs**.
+
+```bash
+curl -sS -X POST http://127.0.0.1:28480/command/anx.asset.pairing.redeem \
+  -H 'content-type: application/json' \
+  -d '{"command":"anx.asset.pairing.redeem","payload":{"url":"https://REGISTRY_URL/api/public/asset-pairing/redeem","token":"TOKEN","role":"primary","caFile":"/app/local_data/certs/registry-ca.crt"}}'
+```
 
 The node pulls the **full init bundle** (same writer as USB/BLE: `region-registration.yaml`, `general.yml`, `certs/region-ca.crt`) then the normal registration loop runs. The token is sent to the region (Authorization header), not used as a local admin password. Links are **one-time**; expired or reused tokens are rejected.
 
@@ -143,10 +151,10 @@ cd nexus-asset-example-docker-dev
 # TOKEN: one-time secret shown once at link creation
 curl -sS -X POST http://127.0.0.1:28480/command/anx.asset.pairing.redeem \
   -H 'content-type: application/json' \
-  -d '{"payload":{"url":"https://REGISTRY_URL/api/public/asset-pairing/redeem","token":"TOKEN","role":"primary"}}'
+  -d '{"command":"anx.asset.pairing.redeem","payload":{"url":"https://REGISTRY_URL/api/public/asset-pairing/redeem","token":"TOKEN","role":"primary"}}'
 ```
 
-If that URL fails, re-run the same curl with another registry alternative listed in the portal (do not invent URLs or use region public URLs). Role `primary` is required for the first edge node; use `secondary` only for an additional replica.
+If that URL fails, re-run the same curl with another registry alternative listed in the portal (do not invent URLs or use region public URLs). Role `primary` is required for the first edge node; use `secondary` only for an additional replica. Add `"caFile":"/app/local_data/certs/registry-ca.crt"` when the registry certificate is signed by a CA you placed in `data/certs/`.
 
 ## Region and registry endpoints
 

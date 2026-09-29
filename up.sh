@@ -171,4 +171,7 @@ echo "Then pair with any one method: 1 manual ZIP, 2 USB, 3 Bluetooth, 4 pairing
 echo "Pairing link (token and registry URL from the portal):"
 echo "  curl -sS -X POST http://127.0.0.1:\${SERVER_PORT:-28480}/command/anx.asset.pairing.redeem \\"
 echo "    -H 'content-type: application/json' \\"
-echo "    -d '{\"payload\":{\"url\":\"https://REGISTRY_URL/api/public/asset-pairing/redeem\",\"token\":\"TOKEN\",\"role\":\"primary\"}}'"
+echo "    -d '{\"command\":\"anx.asset.pairing.redeem\",\"payload\":{\"url\":\"https://REGISTRY_URL/api/public/asset-pairing/redeem\",\"token\":\"TOKEN\",\"role\":\"primary\"}}'"
+echo "  Optional, private registry CA (file on the host: data/certs/registry-ca.crt):"
+echo "    add \"caFile\":\"/app/local_data/certs/registry-ca.crt\" to payload"
+echo "  Or skip TLS verification: add \"ignoreSslErrors\":true to payload"
