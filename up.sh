@@ -47,6 +47,13 @@ set_if_empty() {
   fi
 }
 
+# 8428 is VictoriaMetrics' own default and is often already taken on a robot.
+# Container listen address stays 8428; this is only the host publish.
+if grep -qE '^VICTORIAMETRICS_PORT=8428$' .env; then
+  sed -i 's|^VICTORIAMETRICS_PORT=8428$|VICTORIAMETRICS_PORT=38428|' .env
+  echo "  VICTORIAMETRICS_PORT=38428 (host 8428 is left for whatever already holds it)"
+fi
+
 set_if_empty SINGLE_ASSET_MODE true
 set_if_empty SINGLE_ASSET_DIR asset-local
 set_if_empty OPERATION_MODE single_asset
