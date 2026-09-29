@@ -11,7 +11,7 @@
 
 services:
   anx-assets-node:
-    image: ${ANX_ASSETS_NODE_IMAGE:-eu1.dockerreg.sdk.assetsnexus.org/anx-assets-node}:${ANX_ASSETS_NODE_TAG:-latest}
+    image: ${ANX_ASSETS_NODE_IMAGE:-eu1.dockerreg.sdk.assetsnexus.org/anx.asset.node}:${ANX_ASSETS_NODE_TAG:-latest}
     # Omit platform: so Docker pulls the host architecture (Pi arm64 vs PC amd64).
     container_name: anx-assets-node-ipc
     restart: unless-stopped

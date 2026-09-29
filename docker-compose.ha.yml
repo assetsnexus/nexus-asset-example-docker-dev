@@ -17,7 +17,7 @@ services:
       - redis-primary
 
   asset-a:
-    image: anx-assets-node:latest
+    image: anx.asset.node:latest
     environment:
       OPERATION_MODE: single_asset
       ANX_REPLICA_ID: a
@@ -27,7 +27,7 @@ services:
       - redis-primary
 
   asset-b:
-    image: anx-assets-node:latest
+    image: anx.asset.node:latest
     environment:
       OPERATION_MODE: single_asset
       ANX_REPLICA_ID: b

@@ -23,7 +23,7 @@ docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
 
 Then register the asset with **one** of the four init paths below.
 
-Pulls `eu1.dockerreg.sdk.assetsnexus.org/anx-assets-node:latest` (multi-arch amd64/arm64). Do **not** set `DOCKER_DEFAULT_PLATFORM` unless you are cross-deploying — forcing `linux/amd64` on a Pi causes `exec format error`.
+Pulls `eu1.dockerreg.sdk.assetsnexus.org/anx.asset.node:latest` (multi-arch amd64/arm64). Do **not** set `DOCKER_DEFAULT_PLATFORM` unless you are cross-deploying — forcing `linux/amd64` on a Pi causes `exec format error`.
 
 Edge AI also pulls `eu1.dockerreg.sdk.assetsnexus.org/anx-inference-backend:latest`. A later publish step must produce that image with `ANX_INFERENCE_MODE=asset_edge` support (Mongo+Redis edge storage profile). Until then, compose validates but the container will not run agents.
 
@@ -214,7 +214,7 @@ After pairing: **Force Sync** → portal Asset → Edge AI page should show `run
 
 | Image | Tag | Notes |
 |-------|-----|--------|
-| `eu1.dockerreg.sdk.assetsnexus.org/anx-assets-node` | `latest` | Must understand `ANX_EDGE_INFERENCE_URL` + local trust file |
+| `eu1.dockerreg.sdk.assetsnexus.org/anx.asset.node` | `latest` | Must understand `ANX_EDGE_INFERENCE_URL` + local trust file |
 | `eu1.dockerreg.sdk.assetsnexus.org/anx-inference-backend` | `latest` | Must understand `ANX_INFERENCE_MODE=asset_edge` (Mongo+Redis only) |
 
 Host camera/mic for `live_interface` labs: copy `docker-compose.override.inference.example.yml` → `docker-compose.override.yml` (gitignored).
