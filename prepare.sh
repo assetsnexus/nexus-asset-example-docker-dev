@@ -323,16 +323,17 @@ if has_profile oem || has_profile oem-io; then
     rm -rf data/mqtt/passwd
     echo "  removed data/mqtt/passwd directory left by a missing-file mount"
   fi
-  if command -v mosquitto_passwd >/dev/null 2>&1; then
+  # docker run writes the file as root. chmod on the host then fails.
+  if command -v mosquitto_passwd >/dev/null 2>&1 && { [[ ! -e data/mqtt/passwd ]] || [[ -w data/mqtt/passwd ]]; }; then
     mosquitto_passwd -b -c data/mqtt/passwd anx "${MQTT_PASSWORD}"
+    chmod 600 data/mqtt/passwd
   else
-    docker run --rm \
+    docker run --rm --user 0:0 \
       -v "$PWD/data/mqtt:/cfg" \
-      --user 0:0 \
+      -e "MQTT_PASSWORD=${MQTT_PASSWORD}" \
       eclipse-mosquitto:latest \
-      mosquitto_passwd -b -c /cfg/passwd anx "${MQTT_PASSWORD}"
+      sh -c 'mosquitto_passwd -b -c /cfg/passwd anx "$MQTT_PASSWORD" && chmod 600 /cfg/passwd'
   fi
-  chmod 600 data/mqtt/passwd
   echo "  wrote data/mqtt/passwd for user anx"
 
   # TLS CA + broker cert for Mosquitto 8883 (never commit data/mqtt/certs or private keys).
