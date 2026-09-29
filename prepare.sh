@@ -228,6 +228,22 @@ if [[ "$WITH_INFERENCE" == true ]]; then
   set_env_in_file .env.inference AWS_SECRET_ACCESS_KEY "${MINIO_ROOT_PASSWORD}"
   set_env_in_file .env.inference AWS_REGION "us-east-1"
   echo "  inference: set MinIO/S3 credentials (password not printed)"
+
+  # Compose image: substitution reads .env only. .env.inference is container env.
+  PUBLISHED_INFERENCE_IMAGE="eu1.dockerreg.sdk.assetsnexus.org/nexus/inference/anx.inference.backend"
+  cur_image="$(grep -E '^ANX_INFERENCE_IMAGE=' .env.inference | head -1 | cut -d= -f2- || true)"
+  if [[ -z "$cur_image" || "$cur_image" == "eu1.dockerreg.sdk.assetsnexus.org/anx-inference-backend" ]]; then
+    set_env_in_file .env.inference ANX_INFERENCE_IMAGE "$PUBLISHED_INFERENCE_IMAGE"
+    cur_image="$PUBLISHED_INFERENCE_IMAGE"
+  fi
+  cur_tag="$(grep -E '^ANX_INFERENCE_TAG=' .env.inference | head -1 | cut -d= -f2- || true)"
+  if [[ -z "$cur_tag" || "$cur_tag" == "latest" ]]; then
+    set_env_in_file .env.inference ANX_INFERENCE_TAG "0.1.3"
+    cur_tag="0.1.3"
+  fi
+  set_env_in_file .env ANX_INFERENCE_IMAGE "$cur_image"
+  set_env_in_file .env ANX_INFERENCE_TAG "$cur_tag"
+  echo "  inference image: ${cur_image}:${cur_tag}"
   mkdir -p volumes/minio
 fi
 

@@ -9,7 +9,7 @@
 
 services:
   anx-inference:
-    image: ${ANX_INFERENCE_IMAGE:-eu1.dockerreg.sdk.assetsnexus.org/anx-inference-backend}:${ANX_INFERENCE_TAG:-latest}
+    image: ${ANX_INFERENCE_IMAGE:-eu1.dockerreg.sdk.assetsnexus.org/nexus/inference/anx.inference.backend}:${ANX_INFERENCE_TAG:-0.1.3}
     container_name: anx-ipc-inference
     restart: unless-stopped
     profiles: ["inference"]
