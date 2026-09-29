@@ -20,6 +20,8 @@ Then start the robot sidecar (`./up.sh` in [asset-demo-pirobot-sidecar](https://
 
 `./up.sh` writes `.env` from the example when it is missing, generates secrets, and runs `docker compose up -d`. Defaults are `OPERATION_MODE=single_asset` and profiles `registry-db,oem,inference`. Lab dashboards stay off unless you add `observe`.
 
+`./down.sh` stops the containers. It does not delete `./data` or `./volumes`. A `-v` argument is ignored.
+
 **Full Edge AI** (asset node + Mongo/Redis + on-device `anx-inference` sidecar):
 
 ```bash
