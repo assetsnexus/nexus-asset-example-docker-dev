@@ -242,7 +242,7 @@ services:
       - ./volumes/nodered:/data
       - /sys:/sys:ro
     ports:
-      - "${NODERED_PORT:-1880}:1880"
+      - "${NODERED_PORT:-31880}:1880"
     depends_on:
       - mqtt
     healthcheck:
@@ -264,7 +264,7 @@ services:
       - ./flows/port-io.json:/data/port-io.json:ro
       - ./data/mqtt/certs/ca.crt:/certs/ca.crt:ro
     ports:
-      - "${NODERED_IO_PORT:-1881}:1880"
+      - "${NODERED_IO_PORT:-31881}:1880"
     depends_on:
       - mqtt
     healthcheck:
