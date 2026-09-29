@@ -317,23 +317,14 @@ if has_profile oem || has_profile oem-io; then
     echo "ERROR: MQTT_PASSWORD is empty" >&2
     exit 1
   fi
-  # A missing source path is created by Docker as a directory, and Mosquitto
-  # then exits with "passwd is not a file".
-  if [[ -d data/mqtt/passwd ]]; then
-    rm -rf data/mqtt/passwd
-    echo "  removed data/mqtt/passwd directory left by a missing-file mount"
-  fi
-  # docker run writes the file as root. chmod on the host then fails.
-  if command -v mosquitto_passwd >/dev/null 2>&1 && { [[ ! -e data/mqtt/passwd ]] || [[ -w data/mqtt/passwd ]]; }; then
-    mosquitto_passwd -b -c data/mqtt/passwd anx "${MQTT_PASSWORD}"
-    chmod 600 data/mqtt/passwd
-  else
-    docker run --rm --user 0:0 \
-      -v "$PWD/data/mqtt:/cfg" \
-      -e "MQTT_PASSWORD=${MQTT_PASSWORD}" \
-      eclipse-mosquitto:latest \
-      sh -c 'mosquitto_passwd -b -c /cfg/passwd anx "$MQTT_PASSWORD" && chmod 600 /cfg/passwd'
-  fi
+  # A missing source path is created by Docker as a directory ("passwd is not a file").
+  # mosquitto_passwd -c uses O_EXCL, so an existing root-owned file must be removed first.
+  # chmod on the host fails for that root-owned file, so mode is set in the container.
+  docker run --rm --user 0:0 \
+    -v "$PWD/data/mqtt:/cfg" \
+    -e "MQTT_PASSWORD=${MQTT_PASSWORD}" \
+    eclipse-mosquitto:latest \
+    sh -c 'rm -rf /cfg/passwd && mosquitto_passwd -b -c /cfg/passwd anx "$MQTT_PASSWORD" && chmod 600 /cfg/passwd'
   echo "  wrote data/mqtt/passwd for user anx"
 
   # TLS CA + broker cert for Mosquitto 8883 (never commit data/mqtt/certs or private keys).
