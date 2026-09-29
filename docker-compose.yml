@@ -22,7 +22,7 @@ services:
       - LOCAL_DATA_PATH=/app/local_data
       - VICTORIAMETRICS_URL=${VICTORIAMETRICS_URL:-http://victoriametrics:8428}
       - ANX_USB_ASSET_INIT_ROOT=/media/usb
-      - MQTT_BROKER=${MQTT_BROKER:-mqtts://127.0.0.1:8883}
+      - MQTT_BROKER=${MQTT_BROKER:-mqtts://127.0.0.1:28883}
       - MQTT_CA_FILE=${MQTT_CA_FILE:-/app/local_data/mqtt/certs/ca.crt}
       - ANX_EDGE_INFERENCE_URL=${ANX_EDGE_INFERENCE_URL:-http://anx-inference:3055}
       - ANX_EDGE_LOCAL_TOKEN_FILE=${ANX_EDGE_LOCAL_TOKEN_FILE:-/app/local_data/edge/local-trust.token}
@@ -47,12 +47,13 @@ services:
       victoriametrics:
         condition: service_started
     ports:
-      - "${SERVER_PORT:-8080}:8080"
-      - "${INTERNAL_PORT:-8081}:8081"
-      - "${GRPC_PORT:-50051}:50051"
-      - "${WEBSOCKET_PORT:-8082}:8082"
+      # Host and container listen on the same custom high ports (SERVER_PORT etc.).
+      - "${SERVER_PORT:-28480}:${SERVER_PORT:-28480}"
+      - "${INTERNAL_PORT:-28481}:${INTERNAL_PORT:-28481}"
+      - "${GRPC_PORT:-25051}:${GRPC_PORT:-25051}"
+      - "${WEBSOCKET_PORT:-28482}:${WEBSOCKET_PORT:-28482}"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${INTERNAL_PORT:-28481}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -90,7 +91,7 @@ services:
     volumes:
       - ./volumes/postgres:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-35432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DATABASE:-anx_assets}"]
       interval: 10s
@@ -113,7 +114,7 @@ services:
       - ./volumes/mongodb/data:/data/db
       - ./volumes/mongodb/config:/data/configdb
     ports:
-      - "${MONGO_PORT:-27018}:27017"
+      - "${MONGO_PORT:-37017}:27017"
     healthcheck:
       test:
         [
@@ -139,7 +140,7 @@ services:
     volumes:
       - ./volumes/redis:/data
     ports:
-      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-36379}:6379"
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep -q PONG"]
       interval: 10s
@@ -213,7 +214,7 @@ services:
     container_name: anx-ipc-mqtt
     restart: unless-stopped
     ports:
-      - "${MQTT_TLS_PORT:-8883}:8883"
+      - "${MQTT_TLS_PORT:-28883}:8883"
     volumes:
       - ./data/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./data/mqtt/passwd:/mosquitto/config/passwd:ro

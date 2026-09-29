@@ -201,7 +201,7 @@ if [[ "$WITH_INFERENCE" == true ]]; then
   MONGODB_URI="mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb:27017/anx_inference?authSource=admin"
 
   set_inference_env_if_empty ANX_INFERENCE_MODE "asset_edge"
-  set_inference_env_if_empty ANX_ASSETS_NODE_URL "http://anx-assets-node:8080"
+  set_inference_env_if_empty ANX_ASSETS_NODE_URL "http://anx-assets-node:${SERVER_PORT:-28480}"
   set_inference_env_if_empty ANX_EDGE_LOCAL_TOKEN_FILE "/edge/local-trust.token"
   set_inference_env_if_empty APP_HOST "0.0.0.0"
   set_inference_env_if_empty APP_PORT "${ANX_INFERENCE_PORT:-3055}"
@@ -271,9 +271,9 @@ if has_profile oem || has_profile oem-io; then
     echo "  kept existing data/mqtt/certs"
   fi
 
-  set_env_if_empty MQTT_BROKER "mqtts://127.0.0.1:8883"
+  set_env_if_empty MQTT_BROKER "mqtts://127.0.0.1:28883"
   set_env_if_empty MQTT_CA_FILE "/app/local_data/mqtt/certs/ca.crt"
-  set_env_if_empty MQTT_TLS_PORT "8883"
+  set_env_if_empty MQTT_TLS_PORT "28883"
 fi
 
 REG_DB=false
@@ -336,10 +336,10 @@ mode: single_asset
 single_asset_dir: ${SINGLE_ASSET_DIR:-asset-local}
 server:
   host: "0.0.0.0"
-  port: ${SERVER_PORT:-8080}
-  internal_port: ${INTERNAL_PORT:-8081}
-  grpc_port: ${GRPC_PORT:-50051}
-  websocket_port: ${WEBSOCKET_PORT:-8082}
+  port: ${SERVER_PORT:-28480}
+  internal_port: ${INTERNAL_PORT:-28481}
+  grpc_port: ${GRPC_PORT:-25051}
+  websocket_port: ${WEBSOCKET_PORT:-28482}
 victoriametrics:
   url: ${VICTORIAMETRICS_URL:-http://victoriametrics:8428}
   buffer_size: 10000
@@ -373,7 +373,7 @@ scrape_configs:
   - job_name: anx-assets-node
     metrics_path: /metrics
     static_configs:
-      - targets: ['anx-assets-node:${INTERNAL_PORT:-8081}']
+      - targets: ['anx-assets-node:${INTERNAL_PORT:-28481}']
 
   - job_name: victoriametrics
     static_configs:

@@ -22,7 +22,7 @@ services:
       - APP_HOST=0.0.0.0
       - APP_PORT=${ANX_INFERENCE_PORT:-3055}
       - ANX_INFERENCE_MODE=asset_edge
-      - ANX_ASSETS_NODE_URL=http://anx-assets-node:8080
+      - ANX_ASSETS_NODE_URL=http://anx-assets-node:${SERVER_PORT:-28480}
       - ANX_EDGE_LOCAL_TOKEN_FILE=/edge/local-trust.token
     volumes:
       - ./data/edge:/edge:ro

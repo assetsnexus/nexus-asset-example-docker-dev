@@ -101,15 +101,15 @@ If BLE hardware or D-Bus is missing, the node keeps USB, manual, and pairing-lin
 Use when the stack is already up (`./prepare.sh && docker compose up -d`) and you can reach the region over the network (no USB stick / no BLE).
 
 1. In the portal setup wizard → **Pairing link**. Choose **primary** or **secondary** (forced **primary** if this is the first edge node for the asset). Default expiry **2 hours** (max **48 hours**). Create the link and copy the token (shown once) plus one redeem URL.
-2. On the IPC, redeem against the **local** asset-node command port (`SERVER_PORT`, default **8080**). Pick **one** URL per curl (wizard lists region `publicUrl`, `alternativeUrls`, and other public endpoints as options — do not spam health checks; re-run with another listed URL only if the first fails):
+2. On the IPC, redeem against the **local** asset-node command port (`SERVER_PORT`, default **28480**). Pick **one** registry redeem URL per curl (wizard lists assets-registry HTTPS origins — not region hosts — do not spam health checks; re-run with another listed URL only if the first fails):
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8080/command/anx.asset.pairing.redeem \
+curl -sS -X POST http://127.0.0.1:28480/command/anx.asset.pairing.redeem \
   -H 'content-type: application/json' \
-  -d '{"payload":{"url":"https://REGION_URL","token":"TOKEN","role":"primary"}}'
+  -d '{"payload":{"url":"https://REGISTRY_URL/api/public/asset-pairing/redeem","token":"TOKEN","role":"primary"}}'
 ```
 
-Replace `REGION_URL` with a full redeem URL from the wizard (ends with `/api/public/asset-pairing/redeem`) or a region base URL; replace `TOKEN` with the one-time secret. Use `"role":"secondary"` only when pairing an HA replica after a primary already exists.
+Replace `REGISTRY_URL` with a registry origin from the wizard (full path ends with `/api/public/asset-pairing/redeem`); replace `TOKEN` with the one-time secret. Do **not** paste a region public URL. Use `"role":"secondary"` only when pairing an HA replica after a primary already exists.
 
 The node pulls the **full init bundle** (same writer as USB/BLE: `region-registration.yaml`, `general.yml`, `certs/region-ca.crt`) then the normal registration loop runs. The token is sent to the region (Authorization header), not used as a local admin password. Links are **one-time**; expired or reused tokens are rejected.
 
@@ -132,14 +132,14 @@ docker compose up -d
 **Pairing-link example** (after portal create; substitute real values):
 
 ```bash
-# REGION_URL: one of the redeem URLs from the portal (primary region or an alternative)
+# REGISTRY_URL: one of the assets-registry redeem URLs from the portal (not a region host)
 # TOKEN: one-time secret shown once at link creation
-curl -sS -X POST http://127.0.0.1:8080/command/anx.asset.pairing.redeem \
+curl -sS -X POST http://127.0.0.1:28480/command/anx.asset.pairing.redeem \
   -H 'content-type: application/json' \
-  -d '{"payload":{"url":"https://REGION_URL/api/public/asset-pairing/redeem","token":"TOKEN","role":"primary"}}'
+  -d '{"payload":{"url":"https://REGISTRY_URL/api/public/asset-pairing/redeem","token":"TOKEN","role":"primary"}}'
 ```
 
-If that URL fails, re-run the same curl with another alternative URL listed in the portal (do not invent URLs). Role `primary` is required for the first edge node; use `secondary` only for an additional replica.
+If that URL fails, re-run the same curl with another registry alternative listed in the portal (do not invent URLs or use region public URLs). Role `primary` is required for the first edge node; use `secondary` only for an additional replica.
 
 ## Region and registry endpoints
 
@@ -205,7 +205,7 @@ docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
 1. Ensures `.env.inference` from the example.
 2. Sets `COMPOSE_PROFILES` to include `registry-db` and `inference`.
 3. Writes a local trust token to `./data/edge/local-trust.token` (gitignored) and points both the asset node and inference at it.
-4. Writes `ANX_INFERENCE_MODE=asset_edge`, Mongo/Redis URLs for the compose siblings, and `ANX_ASSETS_NODE_URL=http://anx-assets-node:8080`.
+4. Writes `ANX_INFERENCE_MODE=asset_edge`, Mongo/Redis URLs for the compose siblings, and `ANX_ASSETS_NODE_URL=http://anx-assets-node:28480`.
 5. Prints: "Edge AI ready — enable edge_ai on the blueprint, pair the asset, then Force Sync."
 
 After pairing: **Force Sync** → portal Asset → Edge AI page should show `runtime: detected` and agents applied once the published image supports `asset_edge`.
