@@ -18,7 +18,7 @@ cd nexus-asset-example-docker-dev
 
 Then start the robot sidecar (`./up.sh` in [asset-demo-pirobot-sidecar](https://github.com/assetsnexus/nexus-asset-pirobot-sidecar)), then pair with **one** of the four methods below.
 
-`./up.sh` writes `.env` from the example when it is missing, generates secrets, and runs `docker compose up -d`. Defaults are `OPERATION_MODE=single_asset` and profiles `registry-db,oem,inference`. Lab dashboards stay off unless you add `observe`.
+`./up.sh` writes `.env` from the example when it is missing, generates secrets, starts the stack, and exits only after every service is up (a one-shot init that exits 0 is fine). `./up.sh -r` runs `docker compose down` first, which removes containers and networks and keeps `./data` and `./volumes`. Defaults are `OPERATION_MODE=single_asset` and profiles `registry-db,oem,inference`. Lab dashboards stay off unless you add `observe`.
 
 `./down.sh` stops the containers. It does not delete `./data` or `./volumes`. A `-v` argument is ignored.
 

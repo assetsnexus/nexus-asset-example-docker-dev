@@ -1,9 +1,31 @@
 #!/usr/bin/env bash
 # OEM shippable edge: secrets, Mosquitto, asset node. Stops at "waiting for pairing".
+#   ./up.sh      start and wait until every service is up
+#   ./up.sh -r   docker compose down (containers and networks only), then start
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
+
+RECREATE=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -r|--recreate)
+      RECREATE=1
+      shift
+      ;;
+    -h|--help)
+      echo "Usage: ./up.sh [-r]"
+      echo "  -r, --recreate  Remove containers and networks (docker compose down), then start."
+      echo "                  Bind-mounted ./data and ./volumes are kept."
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1 (try ./up.sh -h)" >&2
+      exit 1
+      ;;
+  esac
+done
 
 if [[ ! -f .env ]]; then
   cp .env.example .env
@@ -68,7 +90,77 @@ set_if_empty OPERATION_MODE single_asset
 set_if_empty COMPOSE_FILE "docker-compose.yml:docker-compose.inference.yml"
 
 ./prepare.sh
-docker compose up -d
+
+if [[ "$RECREATE" -eq 1 ]]; then
+  echo "==> Recreate: docker compose down (containers and networks only)"
+  docker compose down
+fi
+
+dump_bad_logs() {
+  local svc status
+  while IFS=$'\t' read -r svc status; do
+    [[ -z "$svc" ]] && continue
+    case "$status" in
+      Up*)
+        [[ "$status" == *unhealthy* ]] || continue
+        ;;
+      "Exited (0)"*)
+        continue
+        ;;
+    esac
+    echo "----- logs: ${svc} (${status}) -----" >&2
+    docker compose logs --tail 40 "$svc" >&2 || true
+  done < <(docker compose ps -a --format $'{{.Service}}\t{{.Status}}')
+}
+
+check_stack() {
+  local svc status failed=0
+  declare -A seen=()
+  while IFS=$'\t' read -r svc status; do
+    [[ -z "$svc" ]] && continue
+    seen["$svc"]=1
+    case "$status" in
+      Up*)
+        if [[ "$status" == *unhealthy* ]]; then
+          echo "FAIL ${svc}: ${status}" >&2
+          failed=1
+        else
+          echo "  ok ${svc}: ${status}"
+        fi
+        ;;
+      "Exited (0)"*)
+        echo "  ok ${svc}: ${status}"
+        ;;
+      *)
+        echo "FAIL ${svc}: ${status}" >&2
+        failed=1
+        ;;
+    esac
+  done < <(docker compose ps -a --format $'{{.Service}}\t{{.Status}}')
+
+  while IFS= read -r svc; do
+    [[ -z "$svc" ]] && continue
+    if [[ -z "${seen[$svc]:-}" ]]; then
+      echo "FAIL ${svc}: not created" >&2
+      failed=1
+    fi
+  done < <(docker compose config --services)
+
+  [[ "$failed" -eq 0 ]]
+}
+
+echo "==> Starting stack"
+if ! docker compose up -d --wait --wait-timeout 180; then
+  echo "Compose did not reach a running stack." >&2
+  docker compose ps -a >&2 || true
+  dump_bad_logs
+  exit 1
+fi
+if ! check_stack; then
+  echo "One or more services are not up." >&2
+  dump_bad_logs
+  exit 1
+fi
 
 echo ""
 echo "Edge node is up. Services are running and waiting for pairing."

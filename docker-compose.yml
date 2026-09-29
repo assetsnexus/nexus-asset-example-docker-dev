@@ -1,6 +1,7 @@
 # ANX asset-node IPC example — one asset per host (Linux amd64 / arm64).
 # Usage:
-#   ./up.sh          # prepare + compose; OEM shippable, waiting for pairing
+#   ./up.sh          # prepare + compose; wait until every service is up
+#   ./up.sh -r       # compose down (containers and networks only), then start
 # Full Edge AI:
 #   ./prepare.sh --with-inference
 #   docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
