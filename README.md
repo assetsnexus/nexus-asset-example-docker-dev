@@ -21,7 +21,7 @@ docker compose up -d
 docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
 ```
 
-Then register the asset with **one** of the three init paths below.
+Then register the asset with **one** of the four init paths below.
 
 Pulls `eu1.dockerreg.sdk.assetsnexus.org/anx-assets-node:latest` (multi-arch amd64/arm64). Do **not** set `DOCKER_DEFAULT_PLATFORM` unless you are cross-deploying — forcing `linux/amd64` on a Pi causes `exec format error`.
 
@@ -61,7 +61,7 @@ docker compose up -d
 
 `prepare.sh` writes `data/config/database.yaml` with `enabled: true` only for profiles that will run.
 
-## Three init options
+## Four init options
 
 After `docker compose up -d`, the node logs `awaiting provisioning` until it has a `region-registration.yaml` with an asset (or registry) id.
 
@@ -94,7 +94,52 @@ After `docker compose up -d`, the node logs `awaiting provisioning` until it has
 3. `docker compose up -d` — node advertises **`ANX-NEW`** until registered, then **`ANX-<code>`**.
 4. Pair and provision from the ANX mobile app (blueprint must allow BLE / `bleApp`).
 
-If BLE hardware or D-Bus is missing, the node keeps USB and manual paths working.
+If BLE hardware or D-Bus is missing, the node keeps USB, manual, and pairing-link paths working.
+
+### 4. Pairing link (one-time URL + token)
+
+Use when the stack is already up (`./prepare.sh && docker compose up -d`) and you can reach the region over the network (no USB stick / no BLE).
+
+1. In the portal setup wizard → **Pairing link**. Choose **primary** or **secondary** (forced **primary** if this is the first edge node for the asset). Default expiry **2 hours** (max **48 hours**). Create the link and copy the token (shown once) plus one redeem URL.
+2. On the IPC, redeem against the **local** asset-node command port (`SERVER_PORT`, default **8080**). Pick **one** URL per curl (wizard lists region `publicUrl`, `alternativeUrls`, and other public endpoints as options — do not spam health checks; re-run with another listed URL only if the first fails):
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/command/anx.asset.pairing.redeem \
+  -H 'content-type: application/json' \
+  -d '{"payload":{"url":"https://REGION_URL","token":"TOKEN","role":"primary"}}'
+```
+
+Replace `REGION_URL` with a full redeem URL from the wizard (ends with `/api/public/asset-pairing/redeem`) or a region base URL; replace `TOKEN` with the one-time secret. Use `"role":"secondary"` only when pairing an HA replica after a primary already exists.
+
+The node pulls the **full init bundle** (same writer as USB/BLE: `region-registration.yaml`, `general.yml`, `certs/region-ca.crt`) then the normal registration loop runs. The token is sent to the region (Authorization header), not used as a local admin password. Links are **one-time**; expired or reused tokens are rejected.
+
+## GitHub edge example: nexus-asset-example-docker-dev
+
+Public mirror: [assetsnexus/nexus-asset-example-docker-dev](https://github.com/assetsnexus/nexus-asset-example-docker-dev).  
+In this workspace the same tree is `anx-public-examples/asset-node-ipc-docker` (same `prepare.sh` / `import-asset.sh` / compose layout).
+
+Copy-paste start as an edge node:
+
+```bash
+git clone https://github.com/assetsnexus/nexus-asset-example-docker-dev.git
+cd nexus-asset-example-docker-dev
+./prepare.sh          # generates certs/secrets under data/ (and profiles)
+docker compose up -d
+```
+
+`prepare.sh` is the init shell script that writes local secrets and readiness checks (including whether the USB path / BLE adapter exist). Then pair with **one** of the four options above.
+
+**Pairing-link example** (after portal create; substitute real values):
+
+```bash
+# REGION_URL: one of the redeem URLs from the portal (primary region or an alternative)
+# TOKEN: one-time secret shown once at link creation
+curl -sS -X POST http://127.0.0.1:8080/command/anx.asset.pairing.redeem \
+  -H 'content-type: application/json' \
+  -d '{"payload":{"url":"https://REGION_URL/api/public/asset-pairing/redeem","token":"TOKEN","role":"primary"}}'
+```
+
+If that URL fails, re-run the same curl with another alternative URL listed in the portal (do not invent URLs). Role `primary` is required for the first edge node; use `secondary` only for an additional replica.
 
 ## Region and registry endpoints
 
@@ -127,7 +172,7 @@ Pairing / init only boots identity and region (or assets-registry) connectivity.
 
 Restoring a wiped IPC or swapping hardware follows the same idea as first-time init (manual ZIP, USB, or BLE), then the twin takes over:
 
-1. **Bring the stack up** on the replacement host (`./prepare.sh` → `docker compose up -d`) and **re-pair** with the existing asset identity (same three init options, using registration material for that prototype / instance).
+1. **Bring the stack up** on the replacement host (`./prepare.sh` → `docker compose up -d`) and **re-pair** with the existing asset identity (same four init options, using registration material for that prototype / instance).
 2. **Quick availability** — after registration the node restores operational config from its **digital twin** (region / registry): blueprint-derived configs and other twin-held state sync down so the asset can come online again without waiting on bulk history.
 3. **Background restore** — metrics, recordings, and other bulk history are then restored in the background from **contracted blob / backup storage** (blueprint deployment Restic / storage rules and operator contracts), not from stuffing large archives into the pairing package.
 
@@ -195,15 +240,16 @@ Enable profile `oem` for **Mosquitto** and **Node-RED** when you want prototype 
 
 Profile `oem-io` starts Mosquitto and a separate Node-RED service (`nodered-io`, host port 1881) with `flows/port-io.json`. The flow subscribes to `anx/<assetId>/port/<portId>/{active,error}` and publishes `relay_state` plus green and red LED topics. The broker is TLS on `mqtt:8883`. Set the `ipc-mqtt` node user to `anx` and the password from `prepare.sh` in the Node-RED editor — the flow file does not store credentials. The CA is mounted at `/certs/ca.crt`. Unit 10 of the Modbus slave reads `data/protocol_mappings/pm-anx-port-io-v1.json`.
 
-## Acceptance runbook (3 assets, 3 types, 3 init paths)
+## Acceptance runbook (init paths)
 
-Use three different blueprints (e.g. plain full asset, BLE runtime enabled, serial/OEM custom container). Create one prototype instance each. Use **one IPC (or checkout) per asset**.
+Use different blueprints (e.g. plain full asset, BLE runtime enabled, serial/OEM custom container). Create one prototype instance each. Use **one IPC (or checkout) per asset**.
 
 | IPC | Init | Steps | Pass criteria |
 |-----|------|-------|----------------|
 | A | Manual | `./prepare.sh` → `./import-asset.sh <prototype.zip>` → `docker compose up -d` | Portal shows registered → online; Force Sync applies |
 | B | USB | `./prepare.sh` → `up -d` (logs awaiting) → put USB init folder on stick | `registration_result.json` success; portal online |
 | C | BLE | `./prepare.sh` (hci0 + bluetoothd OK) → `up -d` → ANX app pairs `ANX-NEW` | Advertised name becomes `ANX-<code>`; portal online |
+| D | Pairing link | `./prepare.sh` → `up -d` → portal create link → local `anx.asset.pairing.redeem` curl | Portal online; `data/certs/region-ca.crt` present |
 
 On each IPC: portal shows online. With `observe` (dev only): Grafana shows node gauges and VictoriaMetrics scrape up.
 
@@ -226,6 +272,8 @@ Physical phone/USB stick may not be available in CI — confirm with node logs (
 | `exec format error` | Image is wrong arch; rebuild multi-arch or unset `DOCKER_DEFAULT_PLATFORM` |
 | BLE never appears | No `hci0`, or host `bluetoothd` down, or D-Bus not mounted |
 | USB ignored | Stick not under `ANX_USB_ASSET_INIT_ROOT`; folder not named `anx-asset-init-*` |
+| Pairing redeem 401/409 | Token expired (default 2h / max 48h), already used, or wrong Authorization value |
+| Pairing redeem HTTP fail | Wrong region URL — retry with another alternative URL from the portal list (one attempt per URL) |
 | Grafana empty | Profile `observe` off, or scrape still pointing at `:9090` — regenerate ZIP / re-run `prepare.sh` |
 
 ## Files
