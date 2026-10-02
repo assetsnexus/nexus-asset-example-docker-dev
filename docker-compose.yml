@@ -34,9 +34,12 @@ services:
       - MQTT_CA_FILE=${MQTT_CA_FILE:-/app/local_data/mqtt/certs/ca.crt}
       - ANX_EDGE_INFERENCE_URL=${ANX_EDGE_INFERENCE_URL:-http://anx-inference:3055}
       - ANX_EDGE_LOCAL_TOKEN_FILE=${ANX_EDGE_LOCAL_TOKEN_FILE:-/app/local_data/edge/local-trust.token}
+    entrypoint: ["/bin/sh", "/app/failsafe-entrypoint.sh"]
+    command: ["/app/anx-assets-node"]
     volumes:
       - ./data:/app/local_data:rw
       - ./data/protocol_mappings:/app/mappings:ro
+      - ./failsafe-entrypoint.sh:/app/failsafe-entrypoint.sh:ro
       - type: bind
         source: ${ANX_USB_ASSET_INIT_ROOT:-/media/usb}
         target: /media/usb
