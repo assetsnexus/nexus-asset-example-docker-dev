@@ -31,7 +31,7 @@ docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
 
 Then register the asset with **one** of the four init paths below.
 
-Pulls `eu1.dockerreg.sdk.assetsnexus.org/anx.asset.node:latest` (multi-arch amd64/arm64). Do **not** set `DOCKER_DEFAULT_PLATFORM` unless you are cross-deploying — forcing `linux/amd64` on a Pi causes `exec format error`.
+Pulls `eu1.dockerreg.sdk.assetsnexus.org/anx.asset.node:latest` (multi-arch amd64/arm64). That tag must be built from an asset-node tree that includes the `asset-jobs` crate (in-process lifecycle loop and `/api/asset-jobs/*`). This example does not vendor that source. Do **not** set `DOCKER_DEFAULT_PLATFORM` unless you are cross-deploying — forcing `linux/amd64` on a Pi causes `exec format error`.
 
 Edge AI pulls `eu1.dockerreg.sdk.assetsnexus.org/nexus/inference/anx.inference.backend:0.1.3` (`ANX_INFERENCE_IMAGE` / `ANX_INFERENCE_TAG` in `.env`, which is what Compose substitutes). `.env.inference` is only the container environment.
 
@@ -181,7 +181,32 @@ The node picks the lowest-latency origin that answers `GET /health`. While that 
 
 ## After pairing: blueprint sync from the registry
 
-Pairing / init only boots identity and region (or assets-registry) connectivity. Once the asset is registered and online it **pulls its blueprint configuration and other relevant instance data** from the region / assets registry on the normal heartbeat / config-sync path (`clonedConfigs`, endpoints, jobs, offerings, etc.). You do not hand-maintain a full config tree on the IPC for day-to-day operation — the digital twin on Nexus is the source of truth; Force Sync in the portal can push an immediate pull.
+Pairing / init only boots identity and region (or assets-registry) connectivity. Once the asset is registered and online it **pulls its blueprint configuration and other relevant instance data** from the region / assets registry on the normal heartbeat / config-sync path (`clonedConfigs`, endpoints, `asset_jobs`, offerings, and the other known config keys). You do not hand-maintain a full config tree on the IPC for day-to-day operation — the digital twin on Nexus is the source of truth; Force Sync in the portal can push an immediate pull.
+
+## Asset jobs (inside the node)
+
+The asset-node process starts an asset-jobs lifecycle loop at boot, inside the existing `anx-assets-node` container. After pairing, config sync stores the job document under `asset_jobs` (registry mode: `asset_jobs@<assetId>`). The loop reads that document and proposes prices for unpriced blueprint-auto drafts. The region stays the authority; failed writes go to the node outbox.
+
+The command REST listener (`SERVER_PORT`, default **28480**) serves loopback `/api/asset-jobs/*` for the on-box edge agent. Callers send `Authorization: Bearer` with the local trust token (`data/edge/local-trust.token`). A missing or wrong token is rejected with 401. Offer ids travel in the JSON body or query string (`/offers/cancel`, `/bids/respond`, `/comments`).
+
+| Method | Path |
+|--------|------|
+| GET | `/api/asset-jobs/blueprint` |
+| POST | `/api/asset-jobs/blueprint/propose` |
+| POST | `/api/asset-jobs/job-blueprint` |
+| GET, POST | `/api/asset-jobs/offers` |
+| POST | `/api/asset-jobs/offers/propose` |
+| POST | `/api/asset-jobs/offers/cancel` |
+| POST | `/api/asset-jobs/offers/reschedule` |
+| GET | `/api/asset-jobs/offers/:offer_id` |
+| GET | `/api/asset-jobs/bids` |
+| POST | `/api/asset-jobs/bids/respond` |
+| GET, POST | `/api/asset-jobs/comments` |
+| POST | `/api/asset-jobs/attachments` |
+| POST | `/api/asset-jobs/issues` |
+| POST | `/api/asset-jobs/notify` |
+
+`./prepare.sh --with-inference` already sets `ANX_ASSETS_NODE_URL` to `http://anx-assets-node:${SERVER_PORT}` and points the node and the sidecar at the same token file. With `observe`, Prometheus already scrapes `anx-assets-node:28481/metrics`, which includes `anx_asset_jobs_proposal_total`, `anx_asset_jobs_agent_call_total`, and `anx_asset_jobs_loop_duration_seconds` once the image contains the crate.
 
 ## Recovering a destroyed or replaced device
 
@@ -223,7 +248,7 @@ docker compose -f docker-compose.yml -f docker-compose.inference.yml up -d
 4. Writes `ANX_INFERENCE_MODE=asset_edge`, Mongo/Redis URLs for the compose siblings, and `ANX_ASSETS_NODE_URL=http://anx-assets-node:28480`.
 5. Prints: "Edge AI ready — enable edge_ai on the blueprint, pair the asset, then Force Sync."
 
-After pairing: **Force Sync** → portal Asset → Edge AI page should show `runtime: detected` and agents applied once the published image supports `asset_edge`.
+After pairing: **Force Sync** → portal Asset → Edge AI page should show `runtime: detected` and agents applied once the published image supports `asset_edge`. Asset job tools on that sidecar call the loopback above on `ANX_ASSETS_NODE_URL` with the same local token. The published inference tag must include that client; this example still pins `0.1.3`.
 
 **Images (publish step, not done in this example):**
 
@@ -245,6 +270,7 @@ Host camera/mic for `live_interface` labs: copy `docker-compose.override.inferen
 | Symptom | Likely cause |
 |---------|----------------|
 | Inference up but `runtime: missing` | `ANX_EDGE_INFERENCE_URL` / token file mismatch between node and inference |
+| Asset job tool connection refused or 401 | `ANX_ASSETS_NODE_URL` must be the node REST port (`SERVER_PORT`); the Bearer token must match `data/edge/local-trust.token`. Republish the pinned inference tag if that image has no asset-jobs client |
 | Inference exits on start | Mongo/Redis not in profiles — rerun `./prepare.sh --with-inference` |
 | `exec format error` on inference | Wrong arch image; same fix as asset node (multi-arch / unset `DOCKER_DEFAULT_PLATFORM`) |
 | Placeholder / mode ignored | Published `anx-inference-backend:latest` does not yet include `asset_edge` — wait for the publish step |

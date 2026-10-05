@@ -59,6 +59,7 @@ services:
         condition: service_started
     ports:
       # Host and container listen on the same custom high ports (SERVER_PORT etc.).
+      # SERVER_PORT also serves loopback /api/asset-jobs/* (Bearer local trust token).
       - "${SERVER_PORT:-28480}:${SERVER_PORT:-28480}"
       - "${INTERNAL_PORT:-28481}:${INTERNAL_PORT:-28481}"
       - "${GRPC_PORT:-25051}:${GRPC_PORT:-25051}"
