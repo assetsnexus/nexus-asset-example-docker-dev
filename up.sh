@@ -7,6 +7,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
+# shellcheck source=require-docker.sh
+source "${ROOT}/require-docker.sh"
+
 RECREATE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -89,11 +92,12 @@ set_if_empty SINGLE_ASSET_DIR asset-local
 set_if_empty OPERATION_MODE single_asset
 set_if_empty COMPOSE_FILE "docker-compose.yml:docker-compose.inference.yml"
 
+require_docker
 ./prepare.sh
 
 if [[ "$RECREATE" -eq 1 ]]; then
   echo "==> Recreate: docker compose down (containers and networks only)"
-  docker compose down
+  "$DOCKER" compose down
 fi
 
 dump_bad_logs() {
@@ -109,8 +113,8 @@ dump_bad_logs() {
         ;;
     esac
     echo "----- logs: ${svc} (${status}) -----" >&2
-    docker compose logs --tail 40 "$svc" >&2 || true
-  done < <(docker compose ps -a --format $'{{.Service}}\t{{.Status}}')
+    "$DOCKER" compose logs --tail 40 "$svc" >&2 || true
+  done < <("$DOCKER" compose ps -a --format $'{{.Service}}\t{{.Status}}')
 }
 
 check_stack() {
@@ -136,7 +140,7 @@ check_stack() {
         failed=1
         ;;
     esac
-  done < <(docker compose ps -a --format $'{{.Service}}\t{{.Status}}')
+  done < <("$DOCKER" compose ps -a --format $'{{.Service}}\t{{.Status}}')
 
   while IFS= read -r svc; do
     [[ -z "$svc" ]] && continue
@@ -144,17 +148,17 @@ check_stack() {
       echo "FAIL ${svc}: not created" >&2
       failed=1
     fi
-  done < <(docker compose config --services)
+  done < <("$DOCKER" compose config --services)
 
   [[ "$failed" -eq 0 ]]
 }
 
 echo "==> Starting stack"
 # The Pi keeps a local copy of the tag. Compose will not replace it unless we pull.
-docker compose pull anx-inference
-if ! docker compose up -d --wait --wait-timeout 180; then
+"$DOCKER" compose pull anx-inference
+if ! "$DOCKER" compose up -d --wait --wait-timeout 180; then
   echo "Compose did not reach a running stack." >&2
-  docker compose ps -a >&2 || true
+  "$DOCKER" compose ps -a >&2 || true
   dump_bad_logs
   exit 1
 fi

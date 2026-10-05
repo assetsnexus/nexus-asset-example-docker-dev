@@ -6,6 +6,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
+# shellcheck source=require-docker.sh
+source "${ROOT}/require-docker.sh"
+
 WITH_INFERENCE=false
 for arg in "$@"; do
   case "$arg" in
@@ -283,7 +286,8 @@ ensure_volume_dirs() {
     return 0
   fi
   echo "  volume dirs are owned by root; creating them via docker"
-  docker run --rm --user 0:0 \
+  require_docker
+  "$DOCKER" run --rm --user 0:0 \
     -v "$PWD/volumes:/volumes" \
     postgres:16-alpine \
     mkdir -p \
@@ -305,7 +309,8 @@ ensure_volume_dirs
 echo "  ensured volumes/{victoriametrics,postgres,mongodb,redis,grafana,prometheus,mqtt,nodered,nodered-io,loki,inference}"
 # anx-inference runs as uid 1000 and mkdir's DATA_DIR/input. A root-owned bind mount is EACCES.
 if has_profile inference; then
-  docker run --rm --user 0:0 \
+  require_docker
+  "$DOCKER" run --rm --user 0:0 \
     -v "$PWD/volumes/inference:/data" \
     postgres:16-alpine \
     sh -c 'mkdir -p /data/input /data/output /data/exports && chown -R 1000:1000 /data'
@@ -314,7 +319,8 @@ fi
 # Older compose mounted volumes/postgres itself. A finished cluster lives next to PG_VERSION.
 if [[ -f volumes/postgres/PG_VERSION && ! -f volumes/postgres/data/PG_VERSION ]]; then
   echo "  moving Postgres cluster into volumes/postgres/data"
-  docker run --rm --user 0:0 \
+  require_docker
+  "$DOCKER" run --rm --user 0:0 \
     -v "$PWD/volumes/postgres:/pg" \
     postgres:16-alpine \
     sh -c 'find /pg -mindepth 1 -maxdepth 1 ! -name data -exec mv {} /pg/data/ \;'
@@ -330,7 +336,8 @@ if has_profile oem || has_profile oem-io; then
   # A missing source path is created by Docker as a directory ("passwd is not a file").
   # mosquitto_passwd -c uses O_EXCL, so an existing root-owned file must be removed first.
   # chmod on the host fails for that root-owned file, so mode is set in the container.
-  docker run --rm --user 0:0 \
+  require_docker
+  "$DOCKER" run --rm --user 0:0 \
     -v "$PWD/data/mqtt:/cfg" \
     -e "MQTT_PASSWORD=${MQTT_PASSWORD}" \
     eclipse-mosquitto:latest \

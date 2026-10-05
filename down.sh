@@ -6,6 +6,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
+# shellcheck source=require-docker.sh
+source "${ROOT}/require-docker.sh"
+
 args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -28,10 +31,11 @@ if [[ -f .env ]]; then
 fi
 export COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml:docker-compose.inference.yml}"
 
+require_docker
 if [[ ${#args[@]} -gt 0 ]]; then
-  docker compose down "${args[@]}"
+  "$DOCKER" compose down "${args[@]}"
 else
-  docker compose down
+  "$DOCKER" compose down
 fi
 
 echo "Stopped. ./data and ./volumes were not removed."
